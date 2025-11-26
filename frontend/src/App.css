@@ -101,6 +101,7 @@ body {
   padding: 0 1rem;
   min-height: calc(100vh - 2rem);
   padding-top: 0.5rem;
+  align-items: flex-start;
 }
 
 @media (max-width: 768px) {
@@ -115,35 +116,58 @@ body {
 
 /* Sidebar */
 .sidebar {
-  flex: 0 0 320px;
+  flex: 0 0 280px;
   background: var(--surface-color);
   border-radius: var(--radius-xl);
   border: 1px solid var(--border-color);
-  padding: 2rem;
+  padding: 1rem;
   display: flex;
   flex-direction: column;
   align-items: center;
   box-shadow: var(--shadow-lg);
-  height: fit-content;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  overflow-x: hidden;
   backdrop-filter: blur(10px);
   transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar::-webkit-scrollbar-track {
+  background: var(--background-color);
+  border-radius: var(--radius-full);
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: var(--radius-full);
+  transition: background 0.2s;
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
 }
 
 @media (max-width: 768px) {
   .sidebar {
     flex: 0 0 auto;
     width: 100%;
-    padding: 1.5rem;
+    padding: 1rem;
     border-radius: var(--radius-lg);
     order: -1;
+    max-height: none;
   }
 }
 
 .sidebar-image {
   width: 100%;
+  max-width: 200px;
   height: auto;
   border-radius: var(--radius-md);
-  margin-bottom: 1rem;
+  margin-bottom: 0.75rem;
   box-shadow: var(--shadow-md);
   transition: transform 0.2s;
 }
@@ -153,16 +177,18 @@ body {
 }
 
 .sidebar-title {
-  font-size: 1.125rem;
+  font-size: 1rem;
   font-weight: 600;
   color: var(--text-primary);
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.25rem;
+  text-align: center;
 }
 
 .sidebar-desc {
-  font-size: 0.875rem;
+  font-size: 0.75rem;
   color: var(--text-secondary);
   text-align: center;
+  margin-bottom: 0.5rem;
 }
 
 /* Main Chat Area */
@@ -689,22 +715,23 @@ body {
 
 /* Custom Workflow Demo Styles */
 .workflow-stages {
-  margin-top: 2rem;
+  margin-top: 0.75rem;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.4rem;
   width: 100%;
 }
 
 .stage-indicator {
-  padding: 1rem;
-  border-radius: var(--radius-lg);
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--radius-md);
   background: var(--background-color);
   transition: all 0.3s ease;
   border: 2px solid var(--border-color);
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   font-weight: 600;
   box-shadow: var(--shadow-sm);
+  line-height: 1.3;
 }
 
 .stage-indicator:hover {
@@ -714,7 +741,7 @@ body {
 
 @media (max-width: 768px) {
   .stage-indicator {
-    padding: 0.875rem;
+    padding: 0.75rem;
     font-size: 0.85rem;
   }
 }
@@ -860,21 +887,57 @@ body {
   margin: 0 auto;
   padding: 1rem 1.5rem;
   display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.navbar-left,
+.navbar-right {
+  display: flex;
   gap: 0.75rem;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.navbar-center {
+  display: flex;
+  gap: 0.75rem;
+  flex: 1;
   justify-content: center;
   align-items: center;
+}
+
+@media (max-width: 1024px) {
+  .navbar-container {
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+  
+  .navbar-center {
+    order: 3;
+    width: 100%;
+    flex: 1 1 100%;
+  }
+  
+  .navbar-left,
+  .navbar-right {
+    flex: 1;
+  }
 }
 
 @media (max-width: 768px) {
   .navbar-container {
     padding: 0.75rem 1rem;
     gap: 0.5rem;
+  }
+  
+  .navbar-center {
     flex-wrap: wrap;
   }
 }
 
 .navbar button {
-  flex: 1;
   padding: 0.875rem 1.5rem;
   border: 2px solid var(--border-color);
   background: var(--surface-color);
@@ -886,6 +949,10 @@ body {
   font-size: 0.95rem;
   box-shadow: var(--shadow-sm);
   white-space: nowrap;
+}
+
+.navbar-center button {
+  flex: 1;
 }
 
 .navbar button:hover {
@@ -902,12 +969,218 @@ body {
   box-shadow: var(--shadow-md);
 }
 
+.navbar-home-btn,
+.navbar-doc-btn {
+  padding: 0.75rem 1.25rem;
+}
+
+.navbar-theme-btn {
+  padding: 0.75rem;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+}
+
 @media (max-width: 768px) {
   .navbar button {
     padding: 0.75rem 1rem;
     font-size: 0.9rem;
+  }
+  
+  .navbar-center button {
     flex: 1;
     min-width: 0;
+  }
+  
+  .navbar-theme-btn {
+    width: 44px;
+    height: 44px;
+    padding: 0.5rem;
+  }
+}
+
+/* Documentation Modal */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.modal-content {
+  background: var(--surface-color);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+  max-width: 900px;
+  width: 100%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-color);
+  animation: slideUp 0.3s ease-out;
+}
+
+.modal-header {
+  padding: 1.5rem 2rem;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-hover) 100%);
+  color: white;
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.modal-close {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  font-size: 2rem;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  line-height: 1;
+  padding: 0;
+}
+
+.modal-close:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(1.1);
+}
+
+.modal-body {
+  padding: 2rem;
+  overflow-y: auto;
+  flex: 1;
+  color: var(--text-primary);
+}
+
+.modal-body h1 {
+  color: var(--primary-color);
+  margin-top: 0;
+  margin-bottom: 1.5rem;
+  font-size: 2rem;
+  border-bottom: 2px solid var(--border-color);
+  padding-bottom: 0.5rem;
+}
+
+.modal-body h2 {
+  color: var(--primary-color);
+  margin-top: 2rem;
+  margin-bottom: 1rem;
+  font-size: 1.5rem;
+}
+
+.modal-body h3 {
+  color: var(--text-primary);
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  font-size: 1.25rem;
+}
+
+.modal-body p {
+  margin-bottom: 1rem;
+  line-height: 1.7;
+}
+
+.modal-body ul,
+.modal-body ol {
+  margin-bottom: 1rem;
+  padding-left: 2rem;
+  line-height: 1.8;
+}
+
+.modal-body li {
+  margin-bottom: 0.5rem;
+}
+
+.modal-body code {
+  background: var(--background-color);
+  padding: 0.2em 0.4em;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.9em;
+  color: var(--primary-color);
+  border: 1px solid var(--border-color);
+}
+
+.modal-body pre {
+  background: var(--background-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 1rem;
+  overflow-x: auto;
+  margin: 1rem 0;
+}
+
+.modal-body pre code {
+  background: transparent;
+  padding: 0;
+  border: none;
+  color: var(--text-primary);
+}
+
+.modal-body blockquote {
+  border-left: 4px solid var(--primary-color);
+  padding-left: 1rem;
+  margin: 1rem 0;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.modal-body hr {
+  border: none;
+  border-top: 1px solid var(--border-color);
+  margin: 2rem 0;
+}
+
+@media (max-width: 768px) {
+  .modal-content {
+    max-height: 95vh;
+    margin: 0.5rem;
+  }
+  
+  .modal-header {
+    padding: 1rem 1.5rem;
+  }
+  
+  .modal-header h2 {
+    font-size: 1.25rem;
+  }
+  
+  .modal-body {
+    padding: 1.5rem;
+  }
+  
+  .modal-body h1 {
+    font-size: 1.5rem;
+  }
+  
+  .modal-body h2 {
+    font-size: 1.25rem;
   }
 }
 
@@ -968,15 +1241,30 @@ body {
   }
   
   .sidebar {
-    padding: 1rem;
+    padding: 0.75rem;
+  }
+  
+  .sidebar-image {
+    max-width: 150px;
+    margin-bottom: 0.5rem;
   }
   
   .sidebar-title {
-    font-size: 1rem;
+    font-size: 0.9rem;
   }
   
   .sidebar-desc {
-    font-size: 0.8rem;
+    font-size: 0.7rem;
+  }
+  
+  .workflow-stages {
+    margin-top: 0.5rem;
+    gap: 0.3rem;
+  }
+  
+  .stage-indicator {
+    padding: 0.5rem 0.6rem;
+    font-size: 0.75rem;
   }
   
   .chat-header h2 {

@@ -414,6 +414,299 @@ const BasicApp = () => {
   );
 };
 
+// Documentation Modal Component
+const DocumentationModal = ({ isOpen, onClose }) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>📚 Documentation - How to Use This Project</h2>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        <div className="modal-body">
+          <ReactMarkdown>{`# LangGraph HITL FastAPI Demo - Complete Guide
+
+## 🎯 Project Overview
+
+This project demonstrates **Human-in-the-Loop (HITL)** workflows using LangGraph and FastAPI. It provides three different workflow modes for various use cases:
+
+1. **Basic HITL** - Simple conversation with feedback loop
+2. **Custom Workflow (4-Stage)** - Multi-stage content generation workflow
+3. **Data Analysis (CSV)** - Advanced CSV data analysis with code generation
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+- Python 3.8+
+- Node.js 14+
+- npm or yarn
+
+### Installation
+
+\`\`\`bash
+# Backend Setup
+cd backend
+pip install -r requirements.txt
+
+# Frontend Setup
+cd frontend
+npm install
+\`\`\`
+
+### Running the Application
+
+\`\`\`bash
+# Terminal 1: Start Backend Server
+cd backend
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+# Terminal 2: Start Frontend
+cd frontend
+npm start
+\`\`\`
+
+The application will be available at \`http://localhost:3000\`
+
+---
+
+## 📖 Workflow Modes
+
+### 1. Basic HITL
+
+**Purpose**: Simple conversational AI with human feedback loop.
+
+**How to Use**:
+1. Click on "Basic HITL" in the navbar
+2. Enter your question in the input field
+3. Wait for the AI assistant to generate a response
+4. Review the response and choose:
+   - **Provide Feedback**: Give specific feedback to improve the answer
+   - **Approve**: Accept the answer and get the final version
+
+**Example**:
+- Question: "Explain quantum computing in simple terms"
+- After response, provide feedback: "Make it shorter and add an example"
+- The AI will regenerate with your feedback incorporated
+
+**Use Cases**:
+- Q&A systems
+- Content refinement
+- Educational explanations
+- Customer support
+
+---
+
+### 2. Custom Workflow (4-Stage)
+
+**Purpose**: Multi-stage content generation with research, drafting, and review stages.
+
+**How to Use**:
+1. Click on "Custom Workflow (4-Stage)" in the navbar
+2. Enter your query (e.g., "Write a blog post about renewable energy")
+3. The workflow will automatically go through:
+   - **Stage 1: Research** - Gathers information and context
+   - **Stage 2: Draft** - Creates initial draft content
+   - **Stage 3: Review (HITL)** - Pauses for your feedback
+   - **Stage 4: Finalize** - Produces the final polished version
+
+**At Review Stage**:
+- **Submit Feedback**: Provide specific improvements (e.g., "Add more statistics", "Make the tone more casual")
+- **Approve & Finalize**: Accept the draft and proceed to finalization
+
+**Example**:
+- Query: "Write a technical article about machine learning"
+- At review stage, provide feedback: "Add code examples and make it more beginner-friendly"
+- The system will revise the draft based on your feedback
+
+**Use Cases**:
+- Blog post generation
+- Technical documentation
+- Content creation workflows
+- Article writing with quality control
+
+---
+
+### 3. Data Analysis (CSV)
+
+**Purpose**: Advanced CSV data analysis with automatic code generation, execution, and visualization.
+
+**How to Use**:
+1. Click on "Data Analysis (CSV)" in the navbar
+2. **Upload a CSV file** using the file input
+3. Enter your analysis query (e.g., "Analyze stock price trends" or "Find correlations in car prices")
+4. Click "Start Analysis"
+5. The workflow goes through 7 stages:
+   - **Data Exploration**: Automatically explores your dataset
+   - **Analysis Planning**: Creates a detailed analysis plan
+   - **Code Generation**: Generates Python code (you can interrupt here)
+   - **Code Execution**: Runs the generated code safely
+   - **Visualization**: Creates data visualizations
+   - **Human Review**: Pauses for your review and feedback
+   - **Finalization**: Produces comprehensive final report
+
+**Interrupt Features**:
+- **During Generation**: Send interrupt messages to guide the analysis in real-time
+- **At Review Stage**: Provide feedback on code, visualizations, or analysis plan
+
+**Example Workflow**:
+1. Upload: \`stock_prices.csv\`
+2. Query: "Analyze the price trends and identify the best performing stocks"
+3. During code generation, interrupt: "Focus on the last 6 months only"
+4. At review stage, provide feedback: "Add a correlation heatmap"
+5. Approve to get the final comprehensive report
+
+**Supported Libraries**:
+- pandas (data manipulation)
+- matplotlib (plotting)
+- seaborn (statistical visualizations)
+- numpy (numerical operations)
+
+**Use Cases**:
+- Stock market analysis
+- Sales data analysis
+- Customer behavior analysis
+- Scientific data exploration
+- Business intelligence
+
+---
+
+## 🎨 Features
+
+### Dark/Light Mode Toggle
+- Click the theme toggle button (🌙/☀️) in the navbar to switch between dark and light modes
+- Your preference is saved automatically
+
+### Interrupt Capabilities
+- **Message-based Interrupts**: Send messages during generation to provide real-time guidance
+- **Stage-based Interrupts**: Automatic pauses at key decision points for human review
+
+### Streaming Responses
+- All workflows use streaming for real-time updates
+- See responses appear token by token for better UX
+
+### Session Management
+- Each workflow maintains its own session
+- Use "New Session" to start fresh
+- Thread IDs are managed automatically
+
+---
+
+## 🔧 Technical Details
+
+### Backend Architecture
+- **FastAPI**: RESTful API server
+- **LangGraph**: Workflow orchestration
+- **LangChain**: LLM integration
+- **Server-Sent Events (SSE)**: Real-time streaming
+
+### Frontend Architecture
+- **React**: UI framework
+- **ReactMarkdown**: Markdown rendering
+- **CSS Variables**: Theme system
+
+### API Endpoints
+
+**Basic HITL**:
+- \`POST /start\` - Start conversation
+- \`POST /review\` - Submit review/feedback
+- \`GET /stream/{thread_id}\` - Stream responses
+
+**Custom Workflow**:
+- \`POST /custom-workflow/start\` - Start workflow
+- \`POST /custom-workflow/resume\` - Resume after feedback
+- \`GET /custom-workflow/stream/{thread_id}\` - Stream workflow updates
+
+**Data Analysis**:
+- \`POST /data-analysis/upload\` - Upload CSV file
+- \`POST /data-analysis/start\` - Start analysis
+- \`POST /data-analysis/interrupt\` - Send interrupt message
+- \`POST /data-analysis/resume\` - Resume after review
+- \`GET /data-analysis/stream/{thread_id}\` - Stream analysis updates
+
+---
+
+## 💡 Best Practices
+
+1. **Be Specific in Queries**: More specific queries yield better results
+2. **Use Feedback Effectively**: Provide clear, actionable feedback
+3. **Interrupt When Needed**: Don't wait for completion if you see issues early
+4. **Review Generated Code**: Always review code before execution in data analysis
+5. **Start Fresh**: Use "New Session" when switching between different tasks
+
+---
+
+## 🐛 Troubleshooting
+
+**Backend not responding**:
+- Check if backend is running on port 8000
+- Verify CORS settings if accessing from different origin
+
+**File upload fails**:
+- Ensure CSV file is valid and not corrupted
+- Check file size limits
+
+**Streaming stops**:
+- Check browser console for errors
+- Verify network connection
+- Try refreshing the page
+
+**Theme not persisting**:
+- Clear browser cache and try again
+- Check localStorage is enabled
+
+---
+
+## 📝 Example Queries
+
+### Basic HITL
+- "Explain how neural networks work"
+- "Write a summary of climate change impacts"
+- "Describe the process of photosynthesis"
+
+### Custom Workflow
+- "Write a blog post about sustainable energy"
+- "Create a technical guide for API design"
+- "Draft an article about the future of AI"
+
+### Data Analysis
+- "Analyze sales trends over the past year"
+- "Find correlations between price and features"
+- "Identify outliers in the dataset"
+- "Create visualizations showing monthly patterns"
+
+---
+
+## 🎓 Learning Resources
+
+- [LangGraph Documentation](https://langchain-ai.github.io/langgraph/)
+- [FastAPI Documentation](https://fastapi.tiangolo.com/)
+- [React Documentation](https://react.dev/)
+
+---
+
+## 🤝 Contributing
+
+This is a demo project showcasing HITL workflows. Feel free to extend it with:
+- Additional workflow types
+- More visualization options
+- Enhanced interrupt capabilities
+- Custom analysis templates
+
+---
+
+## 📄 License
+
+This project is a demonstration of HITL workflows using LangGraph and FastAPI.`}</ReactMarkdown>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Main App component with workflow mode selection
 const App = () => {
   const [workflowMode, setWorkflowMode] = useState(() => {
@@ -421,6 +714,7 @@ const App = () => {
     return localStorage.getItem("workflowMode") || "basic";
   });
   const [theme, setTheme] = useState(() => localStorage.getItem("theme") || "light");
+  const [showDocumentation, setShowDocumentation] = useState(false);
 
   // Save workflow mode to localStorage when it changes
   useEffect(() => {
@@ -437,30 +731,69 @@ const App = () => {
     setTheme(prev => prev === "light" ? "dark" : "light");
   };
 
+  const handleHome = () => {
+    setWorkflowMode("basic");
+  };
+
   return (
     <div>
       <nav className="navbar">
         <div className="navbar-container">
-          <button 
-            onClick={() => setWorkflowMode("basic")}
-            className={workflowMode === "basic" ? "active" : ""}
-          >
-            Basic HITL
-          </button>
-          <button 
-            onClick={() => setWorkflowMode("custom")}
-            className={workflowMode === "custom" ? "active" : ""}
-          >
-            Custom Workflow (4-Stage)
-          </button>
-          <button 
-            onClick={() => setWorkflowMode("data-analysis")}
-            className={workflowMode === "data-analysis" ? "active" : ""}
-          >
-            Data Analysis (CSV)
-          </button>
+          <div className="navbar-left">
+            <button 
+              onClick={handleHome}
+              className="navbar-home-btn"
+              title="Home"
+            >
+              🏠 Home
+            </button>
+          </div>
+          
+          <div className="navbar-center">
+            <button 
+              onClick={() => setWorkflowMode("basic")}
+              className={workflowMode === "basic" ? "active" : ""}
+            >
+              Basic HITL
+            </button>
+            <button 
+              onClick={() => setWorkflowMode("custom")}
+              className={workflowMode === "custom" ? "active" : ""}
+            >
+              Custom Workflow (4-Stage)
+            </button>
+            <button 
+              onClick={() => setWorkflowMode("data-analysis")}
+              className={workflowMode === "data-analysis" ? "active" : ""}
+            >
+              Data Analysis (CSV)
+            </button>
+          </div>
+
+          <div className="navbar-right">
+            <button 
+              onClick={() => setShowDocumentation(true)}
+              className="navbar-doc-btn"
+              title="Documentation"
+            >
+              📚 Documentation
+            </button>
+            <button 
+              onClick={toggleTheme}
+              className="navbar-theme-btn"
+              title={theme === "light" ? "Switch to Dark Mode" : "Switch to Light Mode"}
+            >
+              {theme === "light" ? "🌙" : "☀️"}
+            </button>
+          </div>
         </div>
       </nav>
+      
+      <DocumentationModal 
+        isOpen={showDocumentation} 
+        onClose={() => setShowDocumentation(false)} 
+      />
+      
       {workflowMode === "custom" ? <CustomWorkflowDemo /> : 
        workflowMode === "data-analysis" ? <DataAnalysisDemo /> : 
        <BasicApp />}
