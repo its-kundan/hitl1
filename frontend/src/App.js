@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import AssistantService from "./AssistantService";
 import ReactMarkdown from "react-markdown";
 import CustomWorkflowDemo from "./CustomWorkflowDemo";
+import DataAnalysisDemo from "./DataAnalysisDemo";
 import "./App.css";
 
 // Flag to toggle between blocking API and streaming API
@@ -438,12 +439,8 @@ const App = () => {
 
   return (
     <div>
-      <div style={{ 
-        maxWidth: '1200px', 
-        margin: '1rem auto', 
-        padding: '0 1rem' 
-      }}>
-        <div className="workflow-selector">
+      <nav className="navbar">
+        <div className="navbar-container">
           <button 
             onClick={() => setWorkflowMode("basic")}
             className={workflowMode === "basic" ? "active" : ""}
@@ -456,9 +453,17 @@ const App = () => {
           >
             Custom Workflow (4-Stage)
           </button>
+          <button 
+            onClick={() => setWorkflowMode("data-analysis")}
+            className={workflowMode === "data-analysis" ? "active" : ""}
+          >
+            Data Analysis (CSV)
+          </button>
         </div>
-      </div>
-      {workflowMode === "custom" ? <CustomWorkflowDemo /> : <BasicApp />}
+      </nav>
+      {workflowMode === "custom" ? <CustomWorkflowDemo /> : 
+       workflowMode === "data-analysis" ? <DataAnalysisDemo /> : 
+       <BasicApp />}
     </div>
   );
 };

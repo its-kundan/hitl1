@@ -11,3 +11,8 @@ python-dotenv
 sse-starlette
 pyppeteer
 langchain-mcp-adapters
+pandas
+numpy
+matplotlib
+seaborn
+python-multipart

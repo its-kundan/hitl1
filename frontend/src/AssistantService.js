@@ -294,4 +294,112 @@ export default class AssistantService {
     
     return eventSource;
   }
+
+  // Data Analysis Workflow API methods (Lesson 5)
+  static async resumeDataAnalysis({ thread_id, review_action, human_comment }) {
+    try {
+      const body = { thread_id, review_action };
+      if (human_comment) body.human_comment = human_comment;
+      const response = await fetch(`${BASE_URL}/data-analysis/resume`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Backend error (${response.status}): ${errorText || 'Network response was not ok'}`);
+      }
+      return response.json();
+    } catch (error) {
+      if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+        throw new Error(`Cannot connect to backend at ${BASE_URL}. Make sure the backend server is running.`);
+      }
+      throw error;
+    }
+  }
+
+  static streamDataAnalysis(thread_id, onMessageCallback, onErrorCallback, onCompleteCallback) {
+    // Create a new EventSource connection to the data analysis streaming endpoint
+    let eventSource;
+    try {
+      eventSource = new EventSource(`${BASE_URL}/data-analysis/stream/${thread_id}`);
+    } catch (error) {
+      onErrorCallback(new Error(`Cannot connect to backend at ${BASE_URL}. Make sure the backend server is running.`));
+      return null;
+    }
+    
+    // Handle token events (content streaming from various nodes)
+    eventSource.addEventListener('token', (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        onMessageCallback({ 
+          content: data.content,
+          node: data.node
+        });
+      } catch (error) {
+        console.error("Error parsing token event:", error, "Raw data:", event.data);
+        onErrorCallback(error);
+      }
+    });
+    
+    // Handle status events (user_feedback, code_review, finished)
+    eventSource.addEventListener('status', (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        onMessageCallback({ 
+          status: data.status,
+          draft_content: data.draft_content,
+          code: data.code,
+          visualization_path: data.visualization_path,
+          analysis_plan: data.analysis_plan,
+          final_output: data.final_output,
+          current_stage: data.current_stage
+        });
+        
+        // Mark that we've received a status event for this connection
+        if (!window._hasReceivedStatusEvent) {
+          window._hasReceivedStatusEvent = {};
+        }
+        window._hasReceivedStatusEvent[eventSource.url] = true;
+        console.log("Received status event, marking connection for normal closure");
+      } catch (error) {
+        console.error("Error parsing status event:", error, "Raw data:", event.data);
+        onErrorCallback(error);
+      }
+    });
+    
+    // Handle start/resume events
+    eventSource.addEventListener('start', (event) => {
+      console.log("Data analysis stream started:", event.data);
+    });
+    
+    eventSource.addEventListener('resume', (event) => {
+      console.log("Data analysis stream resumed:", event.data);
+    });
+    
+    // Handle errors (same pattern as other stream methods)
+    eventSource.onerror = (error) => {
+      console.log("SSE connection state change - readyState:", eventSource.readyState);
+      
+      const hasReceivedStatusEvent = window._hasReceivedStatusEvent && window._hasReceivedStatusEvent[eventSource.url];
+      
+      if (hasReceivedStatusEvent) {
+        console.log("Stream completed normally after receiving status event");
+        eventSource.close();
+        onCompleteCallback();
+        return;
+      }
+      
+      if (eventSource.readyState !== EventSource.CLOSED && eventSource.readyState !== EventSource.CONNECTING) {
+        console.error("SSE connection error:", error);
+        eventSource.close();
+        onErrorCallback(new Error("Connection error or server disconnected"));
+      } else {
+        console.log("Stream completed normally");
+        onCompleteCallback();
+      }
+    };
+    
+    return eventSource;
+  }
 }
