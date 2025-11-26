@@ -104,6 +104,80 @@ curl -X POST -H "Content-Type: application/json" -d '{
 
 Replace `{thread_id}` with the actual thread_id you receive from the creation endpoint. You can also use the interactive API docs at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) to experiment with these endpoints.
 
+## Testing the Custom Gen AI Workflow (Lesson 4)
+
+This workflow demonstrates a comprehensive multi-stage Gen AI process with HITL:
+
+1. **Research Stage**: AI gathers information about the topic
+2. **Draft Stage**: AI creates content based on research
+3. **Human Review**: Workflow pauses for human feedback (HITL point)
+4. **Finalize Stage**: AI polishes approved content
+
+### 🎯 Enhanced Demo UI
+
+The frontend now includes an enhanced demo interface specifically for the Custom Workflow:
+
+- **Workflow Mode Selector**: Switch between "Basic HITL" and "Custom Workflow (4-Stage)" modes
+- **Visual Stage Indicators**: See which stage is currently active (Research → Draft → Review → Finalize)
+- **Real-time Stage Display**: Each stage shows its content with clear visual separation
+- **HITL Pause Indicator**: Clear visual feedback when the workflow pauses for human input
+- **Revision Tracking**: See how many times feedback has been incorporated
+
+To use the enhanced demo:
+1. Start both backend and frontend servers
+2. Navigate to http://localhost:3000
+3. Select "Custom Workflow (4-Stage)" from the workflow selector
+4. Enter a query and watch the workflow progress through each stage
+
+For detailed demo instructions, see [DEMO_GUIDE.md](DEMO_GUIDE.md).
+
+### Testing Steps:
+
+1) **Start the custom workflow**
+```bash
+curl -X POST -H "Content-Type: application/json" -d '{"human_request": "Write a blog post about the benefits of renewable energy"}' http://localhost:8000/custom/start
+```
+
+2) **Stream the research and draft stages**
+```bash
+curl --no-buffer http://localhost:8000/custom/stream/{thread_id}
+```
+
+3) **Provide feedback on the draft**
+```bash
+curl -X POST -H "Content-Type: application/json" -d '{
+  "thread_id": "{thread_id}",
+  "review_action": "feedback",
+  "human_comment": "Make it more technical and add statistics"
+}' http://localhost:8000/custom/resume
+```
+
+4) **Stream the revised draft**
+```bash
+curl --no-buffer http://localhost:8000/custom/stream/{thread_id}
+```
+
+5) **Approve the draft**
+```bash
+curl -X POST -H "Content-Type: application/json" -d '{
+  "thread_id": "{thread_id}",
+  "review_action": "approved"
+}' http://localhost:8000/custom/resume
+```
+
+6) **Stream the finalized output**
+```bash
+curl --no-buffer http://localhost:8000/custom/stream/{thread_id}
+```
+
+### Workflow Features:
+
+- **Multi-stage processing**: Research → Draft → Review → Finalize
+- **Iterative refinement**: Supports multiple feedback cycles
+- **Real-time streaming**: See each stage as it's generated
+- **State persistence**: Maintains context across all stages
+- **Flexible routing**: Conditional paths based on human decisions
+
 ## Learning Goals
 
 - Understand how to embed LangGraph in a real backend application.
@@ -291,7 +365,7 @@ The browser should automatically open to `http://localhost:3000`. If it doesn't,
 
 #### Available Endpoints
 
-The application provides three different lesson implementations:
+The application provides four different lesson implementations:
 
 1. **Lesson 1 - Blocking API** (`/graph/start`, `/graph/resume`)
    - Traditional REST API with blocking requests
@@ -304,6 +378,11 @@ The application provides three different lesson implementations:
 3. **Lesson 3 - MCP Tools** (`/mcp/start`, `/mcp/approve`)
    - Async MCP tool calling with human approval
    - Requires Docker and GitHub token (optional)
+
+4. **Lesson 4 - Custom Gen AI Workflow** (`/custom/*`)
+   - Advanced multi-stage workflow: Research → Draft → Review → Finalize
+   - Demonstrates comprehensive HITL pattern with multiple AI nodes
+   - Uses SSE for real-time streaming of each stage
 
 #### Testing via Frontend
 
@@ -422,14 +501,24 @@ langgraph-hitl-fastapi-demo/
 ├── backend/                 # Python FastAPI backend
 │   ├── app/                # Application code
 │   │   ├── main.py        # FastAPI app entry point
-│   │   ├── graph.py       # LangGraph definition
-│   │   ├── lesson_*.py    # API route handlers
+│   │   ├── graph.py       # LangGraph definition (Lesson 1-2)
+│   │   ├── custom_workflow.py  # Custom Gen AI workflow (Lesson 4)
+│   │   ├── lesson_01_blocking.py    # Blocking API routes
+│   │   ├── lesson_02_streaming.py   # Streaming API routes
+│   │   ├── lesson_03_async_mcp.py  # MCP tool routes
+│   │   ├── lesson_04_custom.py      # Custom workflow routes
+│   │   ├── models.py      # Pydantic models
 │   │   └── ...
 │   ├── config/            # Configuration files
+│   ├── notebooks/         # Jupyter notebooks for learning
+│   ├── demo_custom_workflow.py  # Demo script for Lesson 4
 │   ├── requirements.txt   # Python dependencies
 │   └── .env              # Environment variables (create this)
 ├── frontend/              # React frontend
 │   ├── src/              # Source code
+│   │   ├── App.js        # Main React component
+│   │   ├── AssistantService.js  # API service layer
+│   │   └── ...
 │   ├── public/           # Static files
 │   ├── package.json      # Node.js dependencies
 │   └── ...
@@ -442,6 +531,7 @@ langgraph-hitl-fastapi-demo/
 - Try different lessons through the frontend interface
 - Review the code in `backend/app/` to understand the implementation
 - Check out the notebooks in `backend/notebooks/` for learning examples
+- Run the demo script: `python backend/demo_custom_workflow.py` (requires backend to be running)
 
 ### Getting Help
 

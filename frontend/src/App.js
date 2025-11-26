@@ -1,12 +1,13 @@
 import React, { useState, useRef, useEffect } from "react";
 import AssistantService from "./AssistantService";
 import ReactMarkdown from "react-markdown";
+import CustomWorkflowDemo from "./CustomWorkflowDemo";
 import "./App.css";
 
 // Flag to toggle between blocking API and streaming API
 const USE_STREAMING = true;
 
-const App = () => {
+const BasicApp = () => {
   // UI states: idle, waiting, user_feedback, finished
   const [uiState, setUiState] = useState("idle");
   const [question, setQuestion] = useState("");
@@ -14,7 +15,6 @@ const App = () => {
   const [feedback, setFeedback] = useState("");
   const [threadId, setThreadId] = useState(null);
   const [history, setHistory] = useState([]);
-  const [theme, setTheme] = useState(() => localStorage.getItem("theme") || "light");
 
   // Refs for tracking accumulated responses in streaming mode
   const startAccumulatedResponseRef = useRef("");
@@ -29,16 +29,6 @@ const App = () => {
       feedbackInputRef.current.focus();
     }
   }, [uiState]);
-
-  // Theme effect
-  useEffect(() => {
-    document.documentElement.setAttribute("data-theme", theme);
-    localStorage.setItem("theme", theme);
-  }, [theme]);
-
-  const toggleTheme = () => {
-    setTheme(prev => prev === "light" ? "dark" : "light");
-  };
 
   // Auto-scroll to bottom of messages
   useEffect(() => {
@@ -321,9 +311,6 @@ const App = () => {
         <div className="chat-header">
           <h2>Assistant</h2>
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <button onClick={toggleTheme} className="theme-toggle-header" title="Toggle Theme">
-              {theme === "light" ? "🌙" : "☀️"}
-            </button>
             <button onClick={resetSession} className="btn-secondary">
               New Session
             </button>
@@ -422,6 +409,56 @@ const App = () => {
           )}
         </div>
       </div>
+    </div>
+  );
+};
+
+// Main App component with workflow mode selection
+const App = () => {
+  const [workflowMode, setWorkflowMode] = useState(() => {
+    // Try to get from localStorage, default to "basic"
+    return localStorage.getItem("workflowMode") || "basic";
+  });
+  const [theme, setTheme] = useState(() => localStorage.getItem("theme") || "light");
+
+  // Save workflow mode to localStorage when it changes
+  useEffect(() => {
+    localStorage.setItem("workflowMode", workflowMode);
+  }, [workflowMode]);
+
+  // Theme effect
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("theme", theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === "light" ? "dark" : "light");
+  };
+
+  return (
+    <div>
+      <div style={{ 
+        maxWidth: '1200px', 
+        margin: '1rem auto', 
+        padding: '0 1rem' 
+      }}>
+        <div className="workflow-selector">
+          <button 
+            onClick={() => setWorkflowMode("basic")}
+            className={workflowMode === "basic" ? "active" : ""}
+          >
+            Basic HITL
+          </button>
+          <button 
+            onClick={() => setWorkflowMode("custom")}
+            className={workflowMode === "custom" ? "active" : ""}
+          >
+            Custom Workflow (4-Stage)
+          </button>
+        </div>
+      </div>
+      {workflowMode === "custom" ? <CustomWorkflowDemo /> : <BasicApp />}
     </div>
   );
 };

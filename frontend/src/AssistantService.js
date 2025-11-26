@@ -169,4 +169,129 @@ export default class AssistantService {
     // Return the eventSource so it can be closed externally if needed
     return eventSource;
   }
+
+  // Custom workflow API methods (Lesson 4)
+  static async createCustomWorkflow(human_request) {
+    try {
+      const response = await fetch(`${BASE_URL}/custom/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ human_request })
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Backend error (${response.status}): ${errorText || 'Network response was not ok'}`);
+      }
+      return response.json();
+    } catch (error) {
+      if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+        throw new Error(`Cannot connect to backend at ${BASE_URL}. Make sure the backend server is running.`);
+      }
+      throw error;
+    }
+  }
+
+  static async resumeCustomWorkflow({ thread_id, review_action, human_comment }) {
+    try {
+      const body = { thread_id, review_action };
+      if (human_comment) body.human_comment = human_comment;
+      const response = await fetch(`${BASE_URL}/custom/resume`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Backend error (${response.status}): ${errorText || 'Network response was not ok'}`);
+      }
+      return response.json();
+    } catch (error) {
+      if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+        throw new Error(`Cannot connect to backend at ${BASE_URL}. Make sure the backend server is running.`);
+      }
+      throw error;
+    }
+  }
+
+  static streamCustomWorkflow(thread_id, onMessageCallback, onErrorCallback, onCompleteCallback) {
+    // Create a new EventSource connection to the custom workflow streaming endpoint
+    let eventSource;
+    try {
+      eventSource = new EventSource(`${BASE_URL}/custom/stream/${thread_id}`);
+    } catch (error) {
+      onErrorCallback(new Error(`Cannot connect to backend at ${BASE_URL}. Make sure the backend server is running.`));
+      return null;
+    }
+    
+    // Handle token events (content streaming from research, draft, or finalize nodes)
+    eventSource.addEventListener('token', (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        // Include node information if available
+        onMessageCallback({ 
+          content: data.content,
+          node: data.node // 'research', 'draft', or 'finalize'
+        });
+      } catch (error) {
+        console.error("Error parsing token event:", error, "Raw data:", event.data);
+        onErrorCallback(error);
+      }
+    });
+    
+    // Handle status events (user_feedback, finished)
+    eventSource.addEventListener('status', (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        onMessageCallback({ 
+          status: data.status,
+          draft_content: data.draft_content,
+          final_output: data.final_output
+        });
+        
+        // Mark that we've received a status event for this connection
+        if (!window._hasReceivedStatusEvent) {
+          window._hasReceivedStatusEvent = {};
+        }
+        window._hasReceivedStatusEvent[eventSource.url] = true;
+        console.log("Received status event, marking connection for normal closure");
+      } catch (error) {
+        console.error("Error parsing status event:", error, "Raw data:", event.data);
+        onErrorCallback(error);
+      }
+    });
+    
+    // Handle start/resume events
+    eventSource.addEventListener('start', (event) => {
+      console.log("Custom workflow stream started:", event.data);
+    });
+    
+    eventSource.addEventListener('resume', (event) => {
+      console.log("Custom workflow stream resumed:", event.data);
+    });
+    
+    // Handle errors (same pattern as streamResponse)
+    eventSource.onerror = (error) => {
+      console.log("SSE connection state change - readyState:", eventSource.readyState);
+      
+      const hasReceivedStatusEvent = window._hasReceivedStatusEvent && window._hasReceivedStatusEvent[eventSource.url];
+      
+      if (hasReceivedStatusEvent) {
+        console.log("Stream completed normally after receiving status event");
+        eventSource.close();
+        onCompleteCallback();
+        return;
+      }
+      
+      if (eventSource.readyState !== EventSource.CLOSED && eventSource.readyState !== EventSource.CONNECTING) {
+        console.error("SSE connection error:", error);
+        eventSource.close();
+        onErrorCallback(new Error("Connection error or server disconnected"));
+      } else {
+        console.log("Stream completed normally");
+        onCompleteCallback();
+      }
+    };
+    
+    return eventSource;
+  }
 }

@@ -400,3 +400,138 @@ body {
   padding: 0;
   color: inherit;
 }
+
+/* Custom Workflow Demo Styles */
+.workflow-stages {
+  margin-top: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.stage-indicator {
+  padding: 0.75rem;
+  border-radius: var(--radius-md);
+  background: var(--background-color);
+  transition: all 0.3s;
+  border: 1px solid var(--border-color);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.stage-indicator.active {
+  background: var(--primary-color);
+  color: white;
+  font-weight: bold;
+  border-color: var(--primary-color);
+  box-shadow: var(--shadow-md);
+}
+
+.stage-indicator.completed {
+  background: var(--success-color);
+  color: white;
+  border-color: var(--success-color);
+}
+
+.stage-banner {
+  padding: 1rem;
+  background: var(--primary-color);
+  color: white;
+  text-align: center;
+  font-size: 1.1rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.hitl-badge {
+  display: inline-block;
+  margin-left: 1rem;
+  padding: 0.25rem 0.75rem;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius-md);
+  font-size: 0.9rem;
+  font-weight: 500;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.stage-content {
+  margin: 1rem 0;
+  padding: 1.5rem;
+  border-left: 4px solid var(--primary-color);
+  background: var(--background-color);
+  border-radius: var(--radius-md);
+  animation: fadeIn 0.5s ease-out;
+}
+
+.stage-content.research-stage {
+  border-left-color: #3b82f6;
+}
+
+.stage-content.draft-stage {
+  border-left-color: #8b5cf6;
+}
+
+.stage-content.finalize-stage {
+  border-left-color: var(--success-color);
+}
+
+.stage-header {
+  font-weight: 600;
+  margin-bottom: 1rem;
+  color: var(--primary-color);
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.workflow-selector {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  padding: 0.5rem;
+  background: var(--background-color);
+  border-radius: var(--radius-md);
+}
+
+.workflow-selector button {
+  flex: 1;
+  padding: 0.75rem 1rem;
+  border: 2px solid var(--border-color);
+  background: var(--surface-color);
+  color: var(--text-primary);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+
+.workflow-selector button:hover {
+  border-color: var(--primary-color);
+  background: var(--background-color);
+}
+
+.workflow-selector button.active {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary:disabled:hover {
+  background: var(--primary-color);
+}
