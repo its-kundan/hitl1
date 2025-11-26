@@ -1,7 +1,7 @@
 // AssistantService.js
 // Centralized service for assistant session/conversation API calls
 
-const BASE_URL = "http://localhost:8000";
+const BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
 
 export default class AssistantService {
   // Original blocking API methods
