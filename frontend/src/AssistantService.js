@@ -402,4 +402,25 @@ export default class AssistantService {
     
     return eventSource;
   }
+
+  // Execute code on demand (like an online IDE)
+  static async executeCode(code, filePath = null) {
+    try {
+      const response = await fetch(`${BASE_URL}/data-analysis/execute-code`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, file_path: filePath })
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Backend error (${response.status}): ${errorText || 'Network response was not ok'}`);
+      }
+      return response.json();
+    } catch (error) {
+      if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+        throw new Error(`Cannot connect to backend at ${BASE_URL}. Make sure the backend server is running.`);
+      }
+      throw error;
+    }
+  }
 }

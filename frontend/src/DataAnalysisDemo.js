@@ -23,6 +23,8 @@ const DataAnalysisDemo = () => {
   const [threadId, setThreadId] = useState(null);
   const [revisionCount, setRevisionCount] = useState(0);
   const [history, setHistory] = useState([]);
+  const [isRunningCode, setIsRunningCode] = useState(false);
+  const [manualExecutionResults, setManualExecutionResults] = useState("");
   
   const dataSummaryRef = useRef("");
   const analysisPlanRef = useRef("");
@@ -332,6 +334,8 @@ const DataAnalysisDemo = () => {
     setThreadId(null);
     setRevisionCount(0);
     setHistory([]);
+    setManualExecutionResults("");
+    setIsRunningCode(false);
   };
 
   const getStageLabel = (stage) => {
@@ -352,6 +356,48 @@ const DataAnalysisDemo = () => {
     if (!path) return null;
     const filename = path.split(/[/\\]/).pop();
     return `http://localhost:8000/data-analysis/visualization/${filename}`;
+  };
+
+  const handleCopyCode = async () => {
+    if (!generatedCode) return;
+    
+    try {
+      await navigator.clipboard.writeText(generatedCode);
+      // Show temporary feedback
+      const copyBtn = document.querySelector('.copy-code-btn');
+      if (copyBtn) {
+        const originalText = copyBtn.textContent;
+        copyBtn.textContent = '✓ Copied!';
+        copyBtn.style.backgroundColor = 'var(--success-color)';
+        setTimeout(() => {
+          copyBtn.textContent = originalText;
+          copyBtn.style.backgroundColor = '';
+        }, 2000);
+      }
+    } catch (err) {
+      alert("Failed to copy code: " + err.message);
+    }
+  };
+
+  const handleRunCode = async () => {
+    if (!generatedCode) return;
+    
+    setIsRunningCode(true);
+    setManualExecutionResults("");
+    
+    try {
+      const result = await AssistantService.executeCode(generatedCode, filePath);
+      
+      if (result.success) {
+        setManualExecutionResults(result.output || "Code executed successfully (no output).");
+      } else {
+        setManualExecutionResults(result.error || "Unknown error occurred.");
+      }
+    } catch (err) {
+      setManualExecutionResults("Error: " + err.message);
+    } finally {
+      setIsRunningCode(false);
+    }
   };
 
   return (
@@ -443,10 +489,60 @@ const DataAnalysisDemo = () => {
 
           {generatedCode && (
             <div className="stage-content draft-stage">
-              <div className="stage-header">💻 Generated Code {revisionCount > 0 && `(Revision ${revisionCount + 1})`}</div>
-              <pre style={{ background: 'var(--bg-secondary)', padding: '1rem', borderRadius: '4px', overflow: 'auto' }}>
+              <div className="stage-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>💻 Generated Code {revisionCount > 0 && `(Revision ${revisionCount + 1})`}</span>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button 
+                    onClick={handleCopyCode}
+                    className="copy-code-btn"
+                    style={{
+                      padding: '0.5rem 1rem',
+                      background: 'var(--secondary-color)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '0.875rem',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseOver={(e) => e.target.style.opacity = '0.9'}
+                    onMouseOut={(e) => e.target.style.opacity = '1'}
+                  >
+                    📋 Copy
+                  </button>
+                  <button 
+                    onClick={handleRunCode}
+                    disabled={isRunningCode}
+                    className="run-code-btn"
+                    style={{
+                      padding: '0.5rem 1rem',
+                      background: isRunningCode ? 'var(--secondary-color)' : 'var(--success-color)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: isRunningCode ? 'not-allowed' : 'pointer',
+                      fontSize: '0.875rem',
+                      transition: 'all 0.2s',
+                      opacity: isRunningCode ? 0.7 : 1
+                    }}
+                    onMouseOver={(e) => !isRunningCode && (e.target.style.opacity = '0.9')}
+                    onMouseOut={(e) => e.target.style.opacity = isRunningCode ? 0.7 : '1'}
+                  >
+                    {isRunningCode ? '⏳ Running...' : '▶️ Run'}
+                  </button>
+                </div>
+              </div>
+              <pre style={{ background: 'var(--bg-secondary)', padding: '1rem', borderRadius: '4px', overflow: 'auto', position: 'relative' }}>
                 <code>{generatedCode}</code>
               </pre>
+              {manualExecutionResults && (
+                <div className="stage-content draft-stage" style={{ marginTop: '1rem' }}>
+                  <div className="stage-header">⚙️ Execution Results (Manual Run)</div>
+                  <pre style={{ background: 'var(--bg-secondary)', padding: '1rem', borderRadius: '4px', overflow: 'auto' }}>
+                    <code>{manualExecutionResults}</code>
+                  </pre>
+                </div>
+              )}
             </div>
           )}
 

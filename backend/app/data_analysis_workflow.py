@@ -81,6 +81,84 @@ def save_visualization(fig, filename: str) -> str:
     return filepath
 
 
+def execute_code_safely(code: str, file_path: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Execute Python code in a safe environment.
+    Returns a dictionary with execution results and any output.
+    """
+    import sys
+    from io import StringIO
+    
+    # Capture stdout and stderr
+    stdout_capture = StringIO()
+    stderr_capture = StringIO()
+    
+    try:
+        # Create a safe execution environment
+        exec_globals = {
+            'pd': pd,
+            'plt': plt,
+            'sns': sns,
+            'np': __import__('numpy'),
+            'os': os,
+            'json': json,
+            'datetime': datetime,
+            'df': None  # Will be set by the code
+        }
+        
+        # Load the dataframe first if file_path is provided
+        if file_path:
+            exec_globals['df'] = load_dataframe(file_path)
+        
+        # Redirect stdout and stderr
+        old_stdout = sys.stdout
+        old_stderr = sys.stderr
+        sys.stdout = stdout_capture
+        sys.stderr = stderr_capture
+        
+        try:
+            # Execute the code
+            exec(code, exec_globals)
+            
+            # Get captured output
+            stdout_output = stdout_capture.getvalue()
+            stderr_output = stderr_capture.getvalue()
+            
+            # Build results
+            results = []
+            if stdout_output:
+                results.append(stdout_output)
+            
+            if stderr_output:
+                results.append(f"Warnings/Errors:\n{stderr_output}")
+            
+            # Check if any variables were created that might be useful
+            if 'df' in exec_globals and exec_globals['df'] is not None:
+                df_info = f"\nDataFrame shape: {exec_globals['df'].shape}"
+                results.append(df_info)
+            
+            execution_output = "\n".join(results) if results else "Code executed successfully (no output)."
+            
+            return {
+                "success": True,
+                "output": execution_output,
+                "error": None
+            }
+        finally:
+            # Restore stdout and stderr
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
+            
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        return {
+            "success": False,
+            "output": None,
+            "error": f"Error executing code: {str(e)}\n\nTraceback:\n{error_trace}"
+        }
+
+
 # --- Graph Nodes Definition ---
 
 def data_exploration_node(state: DataAnalysisWorkflowState) -> DataAnalysisWorkflowState:
@@ -520,5 +598,5 @@ data_analysis_graph = builder.compile(
 )
 
 # --- Exports ---
-__all__ = ["data_analysis_graph", "DataAnalysisWorkflowState"]
+__all__ = ["data_analysis_graph", "DataAnalysisWorkflowState", "execute_code_safely"]
 

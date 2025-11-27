@@ -5,12 +5,13 @@
 from fastapi import APIRouter, Request, UploadFile, File, Form
 from uuid import uuid4
 from app.models import StartRequest, GraphResponse, ResumeRequest
-from app.data_analysis_workflow import data_analysis_graph, DataAnalysisWorkflowState
+from app.data_analysis_workflow import data_analysis_graph, DataAnalysisWorkflowState, execute_code_safely
 from sse_starlette.sse import EventSourceResponse
 import json
 import os
 import shutil
 from typing import Optional
+from pydantic import BaseModel
 
 router = APIRouter()
 
@@ -274,5 +275,27 @@ async def get_visualization(filename: str):
         return FileResponse(file_path)
     else:
         return {"error": "Visualization not found"}
+
+
+class ExecuteCodeRequest(BaseModel):
+    code: str
+    file_path: Optional[str] = None
+
+
+@router.post("/data-analysis/execute-code")
+async def execute_code(request: ExecuteCodeRequest):
+    """
+    Execute Python code on demand (like an online IDE).
+    This allows users to run generated code independently of the workflow.
+    """
+    try:
+        result = execute_code_safely(request.code, request.file_path)
+        return result
+    except Exception as e:
+        return {
+            "success": False,
+            "output": None,
+            "error": f"Error executing code: {str(e)}"
+        }
 
 
