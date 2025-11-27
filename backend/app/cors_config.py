@@ -11,6 +11,11 @@ def add_cors_middleware(app):
     # Split by comma and strip whitespace
     allowed_origins = [origin.strip() for origin in allowed_origins_str.split(",")]
     
+    # In production, you might want to allow all origins or specific domains
+    # For development, use specific origins. For production, consider:
+    # - Specific domain: "https://yourdomain.com,https://www.yourdomain.com"
+    # - Or use allow_origin_regex for pattern matching
+    
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins,

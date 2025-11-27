@@ -3,6 +3,8 @@ import AssistantService from "./AssistantService";
 import ReactMarkdown from "react-markdown";
 import "./App.css";
 
+const BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
+
 const DataAnalysisDemo = () => {
   const [uiState, setUiState] = useState("idle"); // idle, exploring, planning, generating, executing, visualizing, review, finalize, finished
   const [currentStage, setCurrentStage] = useState(null);
@@ -57,7 +59,7 @@ const DataAnalysisDemo = () => {
       const formData = new FormData();
       formData.append("file", file);
       
-      const response = await fetch("http://localhost:8000/data-analysis/upload", {
+      const response = await fetch(`${BASE_URL}/data-analysis/upload`, {
         method: "POST",
         body: formData
       });
@@ -107,7 +109,7 @@ const DataAnalysisDemo = () => {
         formData.append("file_name", fileName);
       }
       
-      const response = await fetch("http://localhost:8000/data-analysis/start", {
+      const response = await fetch(`${BASE_URL}/data-analysis/start`, {
         method: "POST",
         body: formData
       });
@@ -199,7 +201,7 @@ const DataAnalysisDemo = () => {
       formData.append("thread_id", threadId);
       formData.append("message", interruptMessage);
       
-      const response = await fetch("http://localhost:8000/data-analysis/interrupt", {
+      const response = await fetch(`${BASE_URL}/data-analysis/interrupt`, {
         method: "POST",
         body: formData
       });
@@ -355,7 +357,7 @@ const DataAnalysisDemo = () => {
   const getVisualizationUrl = (path) => {
     if (!path) return null;
     const filename = path.split(/[/\\]/).pop();
-    return `http://localhost:8000/data-analysis/visualization/${filename}`;
+    return `${BASE_URL}/data-analysis/visualization/${filename}`;
   };
 
   const handleCopyCode = async () => {
