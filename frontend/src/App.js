@@ -16,6 +16,7 @@ const BasicApp = () => {
   const [feedback, setFeedback] = useState("");
   const [threadId, setThreadId] = useState(null);
   const [history, setHistory] = useState([]);
+  const [errorMessage, setErrorMessage] = useState(null);
 
   // Refs for tracking accumulated responses in streaming mode
   const startAccumulatedResponseRef = useRef("");
@@ -100,8 +101,9 @@ const BasicApp = () => {
             console.error("Streaming error:", error);
             setUiState("idle");
             // Check if error has a message property before using it
-            const errorMessage = error && error.message ? error.message : "Unknown error";
-            alert("Streaming error: " + errorMessage);
+            const errMsg = error && error.message ? error.message : "Unknown error";
+            setErrorMessage(errMsg);
+            alert("Streaming error: " + errMsg);
           },
           // Complete callback
           () => {
@@ -114,8 +116,9 @@ const BasicApp = () => {
       setAssistantResponse("");
       setUiState("idle");
       // Check if error has a message property before using it
-      const errorMessage = err && err.message ? err.message : "Unknown error";
-      alert("Failed to contact backend: " + errorMessage);
+      const errMsg = err && err.message ? err.message : "Unknown error";
+      setErrorMessage(errMsg);
+      alert("Failed to contact backend: " + errMsg);
     }
   };
 
@@ -179,8 +182,9 @@ const BasicApp = () => {
             console.error("Streaming error:", error);
             setUiState("idle");
             // Check if error has a message property before using it
-            const errorMessage = error && error.message ? error.message : "Unknown error";
-            alert("Streaming error: " + errorMessage);
+            const errMsg = error && error.message ? error.message : "Unknown error";
+            setErrorMessage(errMsg);
+            alert("Streaming error: " + errMsg);
           },
           // Complete callback
           () => {
@@ -192,8 +196,9 @@ const BasicApp = () => {
     } catch (err) {
       setUiState("idle");
       // Check if error has a message property before using it
-      const errorMessage = err && err.message ? err.message : "Unknown error";
-      alert("Failed to contact backend: " + errorMessage);
+      const errMsg = err && err.message ? err.message : "Unknown error";
+      setErrorMessage(errMsg);
+      alert("Failed to contact backend: " + errMsg);
     }
   };
 
@@ -268,8 +273,9 @@ const BasicApp = () => {
             console.error("Streaming error:", error);
             setUiState("idle");
             // Check if error has a message property before using it
-            const errorMessage = error && error.message ? error.message : "Unknown error";
-            alert("Streaming error: " + errorMessage);
+            const errMsg = error && error.message ? error.message : "Unknown error";
+            setErrorMessage(errMsg);
+            alert("Streaming error: " + errMsg);
           },
           // Complete callback
           () => {
@@ -283,8 +289,9 @@ const BasicApp = () => {
     } catch (err) {
       setUiState("idle");
       // Check if error has a message property before using it
-      const errorMessage = err && err.message ? err.message : "Unknown error";
-      alert("Failed to contact backend: " + errorMessage);
+      const errMsg = err && err.message ? err.message : "Unknown error";
+      setErrorMessage(errMsg);
+      alert("Failed to contact backend: " + errMsg);
     }
   };
 
@@ -295,6 +302,7 @@ const BasicApp = () => {
     setFeedback("");
     setThreadId(null);
     setHistory([]);
+    setErrorMessage(null);
   };
 
   // Render
@@ -319,6 +327,32 @@ const BasicApp = () => {
         </div>
 
         <div className="messages-area">
+          {errorMessage && (
+            <div style={{ 
+              padding: '1rem', 
+              margin: '1rem', 
+              backgroundColor: '#fee', 
+              border: '1px solid #fcc', 
+              borderRadius: '4px',
+              color: '#c33'
+            }}>
+              <strong>Error:</strong> {errorMessage}
+              <button 
+                onClick={() => setErrorMessage(null)} 
+                style={{ 
+                  float: 'right', 
+                  background: 'none', 
+                  border: 'none', 
+                  cursor: 'pointer',
+                  fontSize: '1.2rem',
+                  color: '#c33'
+                }}
+              >
+                ×
+              </button>
+            </div>
+          )}
+          
           {history.length === 0 && uiState === "idle" && (
             <div style={{ textAlign: 'center', marginTop: '4rem', color: 'var(--text-secondary)' }}>
               <p>Start a conversation to begin.</p>

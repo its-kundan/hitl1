@@ -18,6 +18,7 @@ const DataAnalysisDemo = () => {
   const [generatedCode, setGeneratedCode] = useState("");
   const [executionResults, setExecutionResults] = useState("");
   const [visualizationPath, setVisualizationPath] = useState(null);
+  const [visualizationPaths, setVisualizationPaths] = useState([]);
   const [finalReport, setFinalReport] = useState("");
   
   const [feedback, setFeedback] = useState("");
@@ -27,6 +28,8 @@ const DataAnalysisDemo = () => {
   const [history, setHistory] = useState([]);
   const [isRunningCode, setIsRunningCode] = useState(false);
   const [manualExecutionResults, setManualExecutionResults] = useState("");
+  const [isFixingCode, setIsFixingCode] = useState(false);
+  const [fixedCode, setFixedCode] = useState(null);
   
   const dataSummaryRef = useRef("");
   const analysisPlanRef = useRef("");
@@ -158,6 +161,9 @@ const DataAnalysisDemo = () => {
             if (data.visualization_path) {
               setVisualizationPath(data.visualization_path);
             }
+            if (data.visualization_paths && Array.isArray(data.visualization_paths)) {
+              setVisualizationPaths(data.visualization_paths);
+            }
             if (data.analysis_plan) {
               setAnalysisPlan(data.analysis_plan);
             }
@@ -169,6 +175,9 @@ const DataAnalysisDemo = () => {
             }
             if (data.visualization_path) {
               setVisualizationPath(data.visualization_path);
+            }
+            if (data.visualization_paths && Array.isArray(data.visualization_paths)) {
+              setVisualizationPaths(data.visualization_paths);
             }
             if (data.code) {
               setGeneratedCode(data.code);
@@ -245,6 +254,9 @@ const DataAnalysisDemo = () => {
             }
             if (data.visualization_path) {
               setVisualizationPath(data.visualization_path);
+            }
+            if (data.visualization_paths && Array.isArray(data.visualization_paths)) {
+              setVisualizationPaths(data.visualization_paths);
             }
             if (eventSourceRef.current) {
               eventSourceRef.current.close();
@@ -330,6 +342,7 @@ const DataAnalysisDemo = () => {
     setGeneratedCode("");
     setExecutionResults("");
     setVisualizationPath(null);
+    setVisualizationPaths([]);
     setFinalReport("");
     setFeedback("");
     setInterruptMessage("");
@@ -381,24 +394,49 @@ const DataAnalysisDemo = () => {
     }
   };
 
-  const handleRunCode = async () => {
+  const handleRunCode = async (autoFix = true) => {
     if (!generatedCode) return;
     
     setIsRunningCode(true);
+    setIsFixingCode(false);
     setManualExecutionResults("");
+    setFixedCode(null);
     
     try {
-      const result = await AssistantService.executeCode(generatedCode, filePath);
+      const result = await AssistantService.executeCode(
+        generatedCode, 
+        filePath, 
+        autoFix,  // Enable auto-fix by default
+        query     // Pass original query for context
+      );
       
       if (result.success) {
-        setManualExecutionResults(result.output || "Code executed successfully (no output).");
+        let output = result.output || "Code executed successfully (no output).";
+        if (result.fixed) {
+          output = "✅ Code was automatically fixed and executed!\n\n" + output;
+          if (result.fixed_code) {
+            setFixedCode(result.fixed_code);
+            setGeneratedCode(result.fixed_code); // Update the code with fixed version
+          }
+        }
+        setManualExecutionResults(output);
       } else {
-        setManualExecutionResults(result.error || "Unknown error occurred.");
+        let errorMsg = result.error || "Unknown error occurred.";
+        if (result.fixed && result.fixed_code) {
+          // AI tried to fix but still failed
+          errorMsg = "⚠️ Attempted to auto-fix but error persists:\n\n" + errorMsg;
+          setFixedCode(result.fixed_code);
+        } else if (!autoFix) {
+          // Error occurred, suggest auto-fix
+          errorMsg = errorMsg + "\n\n💡 Tip: The code will be automatically fixed on next run.";
+        }
+        setManualExecutionResults(errorMsg);
       }
     } catch (err) {
       setManualExecutionResults("Error: " + err.message);
     } finally {
       setIsRunningCode(false);
+      setIsFixingCode(false);
     }
   };
 
@@ -491,57 +529,138 @@ const DataAnalysisDemo = () => {
 
           {generatedCode && (
             <div className="stage-content draft-stage">
-              <div className="stage-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span>💻 Generated Code {revisionCount > 0 && `(Revision ${revisionCount + 1})`}</span>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <button 
-                    onClick={handleCopyCode}
-                    className="copy-code-btn"
-                    style={{
-                      padding: '0.5rem 1rem',
-                      background: 'var(--secondary-color)',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      fontSize: '0.875rem',
-                      transition: 'all 0.2s'
-                    }}
-                    onMouseOver={(e) => e.target.style.opacity = '0.9'}
-                    onMouseOut={(e) => e.target.style.opacity = '1'}
-                  >
-                    📋 Copy
-                  </button>
-                  <button 
-                    onClick={handleRunCode}
-                    disabled={isRunningCode}
-                    className="run-code-btn"
-                    style={{
-                      padding: '0.5rem 1rem',
-                      background: isRunningCode ? 'var(--secondary-color)' : 'var(--success-color)',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: isRunningCode ? 'not-allowed' : 'pointer',
-                      fontSize: '0.875rem',
-                      transition: 'all 0.2s',
-                      opacity: isRunningCode ? 0.7 : 1
-                    }}
-                    onMouseOver={(e) => !isRunningCode && (e.target.style.opacity = '0.9')}
-                    onMouseOut={(e) => e.target.style.opacity = isRunningCode ? 0.7 : '1'}
-                  >
-                    {isRunningCode ? '⏳ Running...' : '▶️ Run'}
-                  </button>
+              <div className="stage-header">
+                💻 Generated Code {revisionCount > 0 && `(Revision ${revisionCount + 1})`}
+              </div>
+              <div style={{ position: 'relative', marginTop: '0.5rem' }}>
+                {/* ChatGPT-like code block with copy button in top-right */}
+                <div style={{ 
+                  position: 'relative',
+                  background: '#1e1e1e',
+                  borderRadius: '8px',
+                  overflow: 'hidden',
+                  border: '1px solid var(--border-color)'
+                }}>
+                  {/* Copy and Run buttons in top-right corner */}
+                  <div style={{
+                    position: 'absolute',
+                    top: '8px',
+                    right: '8px',
+                    display: 'flex',
+                    gap: '0.5rem',
+                    zIndex: 10
+                  }}>
+                    <button 
+                      onClick={handleCopyCode}
+                      className="copy-code-btn"
+                      style={{
+                        padding: '0.375rem 0.75rem',
+                        background: 'rgba(255, 255, 255, 0.1)',
+                        color: '#fff',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '0.75rem',
+                        transition: 'all 0.2s',
+                        backdropFilter: 'blur(10px)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.25rem'
+                      }}
+                      onMouseOver={(e) => {
+                        e.target.style.background = 'rgba(255, 255, 255, 0.2)';
+                        e.target.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+                      }}
+                      onMouseOut={(e) => {
+                        e.target.style.background = 'rgba(255, 255, 255, 0.1)';
+                        e.target.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                      }}
+                    >
+                      <span>📋</span> Copy
+                    </button>
+                    <button 
+                      onClick={() => handleRunCode(true)}
+                      disabled={isRunningCode || isFixingCode}
+                      className="run-code-btn"
+                      style={{
+                        padding: '0.375rem 0.75rem',
+                        background: (isRunningCode || isFixingCode) ? 'rgba(255, 255, 255, 0.1)' : 'rgba(16, 185, 129, 0.8)',
+                        color: '#fff',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        borderRadius: '6px',
+                        cursor: (isRunningCode || isFixingCode) ? 'not-allowed' : 'pointer',
+                        fontSize: '0.75rem',
+                        transition: 'all 0.2s',
+                        backdropFilter: 'blur(10px)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.25rem',
+                        opacity: (isRunningCode || isFixingCode) ? 0.7 : 1
+                      }}
+                      onMouseOver={(e) => {
+                        if (!isRunningCode && !isFixingCode) {
+                          e.target.style.background = 'rgba(16, 185, 129, 1)';
+                          e.target.style.borderColor = 'rgba(16, 185, 129, 0.5)';
+                        }
+                      }}
+                      onMouseOut={(e) => {
+                        if (!isRunningCode && !isFixingCode) {
+                          e.target.style.background = 'rgba(16, 185, 129, 0.8)';
+                          e.target.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                        }
+                      }}
+                    >
+                      {isFixingCode ? '🔧 Fixing...' : isRunningCode ? '⏳ Running...' : '▶️ Run'}
+                    </button>
+                  </div>
+                  <pre style={{ 
+                    background: '#1e1e1e',
+                    padding: '2.5rem 1rem 1rem 1rem',
+                    margin: 0,
+                    borderRadius: '8px',
+                    overflow: 'auto',
+                    color: '#d4d4d4',
+                    fontSize: '0.875rem',
+                    lineHeight: '1.5',
+                    fontFamily: 'Consolas, Monaco, "Courier New", monospace'
+                  }}>
+                    <code style={{ color: '#d4d4d4' }}>{generatedCode}</code>
+                  </pre>
                 </div>
               </div>
-              <pre style={{ background: 'var(--bg-secondary)', padding: '1rem', borderRadius: '4px', overflow: 'auto', position: 'relative' }}>
-                <code>{generatedCode}</code>
-              </pre>
               {manualExecutionResults && (
                 <div className="stage-content draft-stage" style={{ marginTop: '1rem' }}>
-                  <div className="stage-header">⚙️ Execution Results (Manual Run)</div>
-                  <pre style={{ background: 'var(--bg-secondary)', padding: '1rem', borderRadius: '4px', overflow: 'auto' }}>
-                    <code>{manualExecutionResults}</code>
+                  <div className="stage-header">
+                    ⚙️ Execution Results (Manual Run)
+                    {fixedCode && (
+                      <span style={{ 
+                        marginLeft: '1rem', 
+                        fontSize: '0.75rem', 
+                        color: 'var(--success-color)',
+                        fontWeight: 'normal'
+                      }}>
+                        ✅ Code was auto-fixed
+                      </span>
+                    )}
+                  </div>
+                  <pre style={{ 
+                    background: manualExecutionResults.includes('Error') || manualExecutionResults.includes('error') 
+                      ? 'rgba(239, 68, 68, 0.1)' 
+                      : 'var(--bg-secondary)', 
+                    padding: '1rem', 
+                    borderRadius: '4px', 
+                    overflow: 'auto',
+                    border: manualExecutionResults.includes('Error') || manualExecutionResults.includes('error')
+                      ? '1px solid rgba(239, 68, 68, 0.3)'
+                      : '1px solid var(--border-color)'
+                  }}>
+                    <code style={{ 
+                      color: manualExecutionResults.includes('Error') || manualExecutionResults.includes('error')
+                        ? 'var(--error-color)'
+                        : 'inherit'
+                    }}>
+                      {manualExecutionResults}
+                    </code>
                   </pre>
                 </div>
               )}
@@ -557,14 +676,59 @@ const DataAnalysisDemo = () => {
             </div>
           )}
 
-          {visualizationPath && (
+          {(visualizationPath || visualizationPaths.length > 0) && (
             <div className="stage-content draft-stage">
-              <div className="stage-header">📊 Visualization</div>
-              <img 
-                src={getVisualizationUrl(visualizationPath)} 
-                alt="Data Visualization" 
-                style={{ maxWidth: '100%', height: 'auto', marginTop: '1rem' }}
-              />
+              <div className="stage-header">📊 Data Visualizations</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginTop: '1rem' }}>
+                {/* Display single visualization path if exists */}
+                {visualizationPath && (
+                  <div style={{ 
+                    border: '1px solid var(--border-color)', 
+                    borderRadius: '8px', 
+                    padding: '1rem',
+                    background: 'var(--bg-secondary)'
+                  }}>
+                    <img 
+                      src={getVisualizationUrl(visualizationPath)} 
+                      alt="Data Visualization" 
+                      style={{ 
+                        maxWidth: '100%', 
+                        height: 'auto',
+                        borderRadius: '4px',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                      }}
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                        e.target.parentElement.innerHTML = '<p style="color: var(--error-color);">Failed to load visualization</p>';
+                      }}
+                    />
+                  </div>
+                )}
+                {/* Display multiple visualizations if available */}
+                {visualizationPaths.map((path, idx) => (
+                  <div key={idx} style={{ 
+                    border: '1px solid var(--border-color)', 
+                    borderRadius: '8px', 
+                    padding: '1rem',
+                    background: 'var(--bg-secondary)'
+                  }}>
+                    <img 
+                      src={getVisualizationUrl(path)} 
+                      alt={`Data Visualization ${idx + 1}`}
+                      style={{ 
+                        maxWidth: '100%', 
+                        height: 'auto',
+                        borderRadius: '4px',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                      }}
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                        e.target.parentElement.innerHTML = '<p style="color: var(--error-color);">Failed to load visualization</p>';
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 

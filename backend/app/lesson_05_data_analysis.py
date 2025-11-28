@@ -201,12 +201,14 @@ async def stream_data_analysis(request: Request, thread_id: str):
                     # Extract draft content for display
                     draft_content = state.values.get('generated_code', '')
                     visualization_path = state.values.get('visualization_path', '')
+                    visualization_paths = state.values.get('visualization_paths', [])
                     
                     status_data = json.dumps({
                         "status": "user_feedback",
                         "draft_content": draft_content,
                         "code": draft_content,
                         "visualization_path": visualization_path,
+                        "visualization_paths": visualization_paths,
                         "current_stage": state.values.get('current_stage', 'human_review')
                     })
                     yield {"event": "status", "data": status_data}
@@ -222,11 +224,13 @@ async def stream_data_analysis(request: Request, thread_id: str):
                     # Workflow finished
                     final_output = state.values.get('final_report', state.values.get('generated_code', ''))
                     visualization_path = state.values.get('visualization_path', '')
+                    visualization_paths = state.values.get('visualization_paths', [])
                     
                     status_data = json.dumps({
                         "status": "finished",
                         "final_output": final_output,
                         "visualization_path": visualization_path,
+                        "visualization_paths": visualization_paths,
                         "code": state.values.get('generated_code', ''),
                         "analysis_plan": state.values.get('analysis_plan', '')
                     })
@@ -235,11 +239,13 @@ async def stream_data_analysis(request: Request, thread_id: str):
                 # Workflow finished
                 final_output = state.values.get('final_report', state.values.get('generated_code', ''))
                 visualization_path = state.values.get('visualization_path', '')
+                visualization_paths = state.values.get('visualization_paths', [])
                 
                 status_data = json.dumps({
                     "status": "finished",
                     "final_output": final_output,
                     "visualization_path": visualization_path,
+                    "visualization_paths": visualization_paths,
                     "code": state.values.get('generated_code', ''),
                     "analysis_plan": state.values.get('analysis_plan', '')
                 })
@@ -280,6 +286,8 @@ async def get_visualization(filename: str):
 class ExecuteCodeRequest(BaseModel):
     code: str
     file_path: Optional[str] = None
+    fix_errors: bool = False  # If True, send errors to AI for fixing
+    original_query: Optional[str] = None  # Original user query for context
 
 
 @router.post("/data-analysis/execute-code")
@@ -287,9 +295,83 @@ async def execute_code(request: ExecuteCodeRequest):
     """
     Execute Python code on demand (like an online IDE).
     This allows users to run generated code independently of the workflow.
+    If fix_errors is True and execution fails, the error is sent to AI for automatic fixing.
     """
+    from app.data_analysis_workflow import model
+    from langchain_core.messages import SystemMessage, HumanMessage
+    
     try:
         result = execute_code_safely(request.code, request.file_path)
+        
+        # If execution failed and fix_errors is enabled, try to fix it
+        if not result["success"] and request.fix_errors and result.get("error"):
+            try:
+                # Send error to AI for fixing
+                system_message = SystemMessage(content="""
+                You are a Python code fixer. A user tried to execute Python code for data analysis, but it failed with an error.
+                Your task is to fix the code by:
+                1. Understanding the error message
+                2. Identifying the issue in the code
+                3. Providing the corrected code
+                4. Ensuring the code is executable and follows best practices
+                
+                Return ONLY the fixed Python code, wrapped in ```python code blocks.
+                Do not include explanations, just the corrected code.
+                """)
+                
+                user_message = HumanMessage(content=f"""
+                Original User Query: {request.original_query or 'Data analysis'}
+                
+                Original Code (with error):
+                ```python
+                {request.code}
+                ```
+                
+                Error Message:
+                {result["error"]}
+                
+                Please fix the code and return only the corrected Python code.
+                """)
+                
+                ai_response = model.invoke([system_message, user_message])
+                
+                # Extract fixed code
+                fixed_code = ai_response.content
+                if "```python" in fixed_code:
+                    fixed_code = fixed_code.split("```python")[1].split("```")[0].strip()
+                elif "```" in fixed_code:
+                    fixed_code = fixed_code.split("```")[1].split("```")[0].strip()
+                
+                # Try executing the fixed code
+                fixed_result = execute_code_safely(fixed_code, request.file_path)
+                
+                if fixed_result["success"]:
+                    return {
+                        "success": True,
+                        "output": fixed_result["output"],
+                        "error": None,
+                        "fixed": True,
+                        "original_error": result["error"],
+                        "fixed_code": fixed_code
+                    }
+                else:
+                    # Even the fixed code failed
+                    return {
+                        "success": False,
+                        "output": None,
+                        "error": f"Attempted to fix but still failed.\n\nOriginal Error: {result['error']}\n\nFixed Code Error: {fixed_result['error']}",
+                        "fixed": True,
+                        "fixed_code": fixed_code
+                    }
+            except Exception as fix_error:
+                # Error fixing failed
+                return {
+                    "success": False,
+                    "output": None,
+                    "error": f"Original error: {result['error']}\n\nFailed to auto-fix: {str(fix_error)}",
+                    "fixed": False
+                }
+        
         return result
     except Exception as e:
         return {

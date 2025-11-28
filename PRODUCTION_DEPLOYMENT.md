@@ -179,3 +179,4 @@ If `ALLOWED_ORIGINS` is not set, defaults to:
 - `backend/app/cors_config.py` - Added production CORS support
 - `frontend/src/AssistantService.js` - Already using BASE_URL (no changes needed)
 
+

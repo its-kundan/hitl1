@@ -139,7 +139,22 @@ export default class AssistantService {
       console.log("Stream resumed:", event.data);
     });
     
-    // Handle errors
+    // Handle error events from the backend
+    eventSource.addEventListener('error', (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        const errorMessage = data.error || "Unknown error occurred";
+        console.error("Backend error event:", errorMessage);
+        eventSource.close();
+        onErrorCallback(new Error(errorMessage));
+      } catch (error) {
+        console.error("Error parsing error event:", error, "Raw data:", event.data);
+        eventSource.close();
+        onErrorCallback(new Error(event.data || "Unknown error occurred"));
+      }
+    });
+    
+    // Handle connection errors
     eventSource.onerror = (error) => {
       console.log("SSE connection state change - readyState:", eventSource.readyState);
       
@@ -269,7 +284,22 @@ export default class AssistantService {
       console.log("Custom workflow stream resumed:", event.data);
     });
     
-    // Handle errors (same pattern as streamResponse)
+    // Handle error events from the backend
+    eventSource.addEventListener('error', (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        const errorMessage = data.error || "Unknown error occurred";
+        console.error("Backend error event:", errorMessage);
+        eventSource.close();
+        onErrorCallback(new Error(errorMessage));
+      } catch (error) {
+        console.error("Error parsing error event:", error, "Raw data:", event.data);
+        eventSource.close();
+        onErrorCallback(new Error(event.data || "Unknown error occurred"));
+      }
+    });
+    
+    // Handle connection errors (same pattern as streamResponse)
     eventSource.onerror = (error) => {
       console.log("SSE connection state change - readyState:", eventSource.readyState);
       
@@ -351,6 +381,7 @@ export default class AssistantService {
           draft_content: data.draft_content,
           code: data.code,
           visualization_path: data.visualization_path,
+          visualization_paths: data.visualization_paths,
           analysis_plan: data.analysis_plan,
           final_output: data.final_output,
           current_stage: data.current_stage
@@ -377,7 +408,22 @@ export default class AssistantService {
       console.log("Data analysis stream resumed:", event.data);
     });
     
-    // Handle errors (same pattern as other stream methods)
+    // Handle error events from the backend
+    eventSource.addEventListener('error', (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        const errorMessage = data.error || "Unknown error occurred";
+        console.error("Backend error event:", errorMessage);
+        eventSource.close();
+        onErrorCallback(new Error(errorMessage));
+      } catch (error) {
+        console.error("Error parsing error event:", error, "Raw data:", event.data);
+        eventSource.close();
+        onErrorCallback(new Error(event.data || "Unknown error occurred"));
+      }
+    });
+    
+    // Handle connection errors (same pattern as other stream methods)
     eventSource.onerror = (error) => {
       console.log("SSE connection state change - readyState:", eventSource.readyState);
       
@@ -404,12 +450,17 @@ export default class AssistantService {
   }
 
   // Execute code on demand (like an online IDE)
-  static async executeCode(code, filePath = null) {
+  static async executeCode(code, filePath = null, fixErrors = false, originalQuery = null) {
     try {
       const response = await fetch(`${BASE_URL}/data-analysis/execute-code`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code, file_path: filePath })
+        body: JSON.stringify({ 
+          code, 
+          file_path: filePath,
+          fix_errors: fixErrors,
+          original_query: originalQuery
+        })
       });
       if (!response.ok) {
         const errorText = await response.text();
