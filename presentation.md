@@ -8,8 +8,7 @@
 ## Human-in-the-Loop AI Assistant with LangGraph
 ### Interactive AI Workflows with Human Feedback Integration
 
-**Presenter:** [Your Name]  
-**Date:** [Presentation Date]  
+**Presenter:** Kundan Kumar  
 **Project:** LangGraph HITL FastAPI Demo
 
 **Tagline:** "Combining AI Automation with Human Intelligence"
@@ -118,6 +117,7 @@
 - **Blocking API:** Traditional request/response (Lesson 1)
 - **Streaming API:** Server-Sent Events for real-time updates (Lesson 2)
 - **MCP Integration:** Model Context Protocol for tool calling (Lesson 3)
+- **Custom Workflow:** Multi-stage Gen AI workflow with HITL (Lesson 4)
 
 ### Key Components
 
@@ -226,7 +226,7 @@ graph = builder.compile(
 
 ## Key Features & Capabilities
 
-### Three Implementation Lessons
+### Four Implementation Lessons
 
 #### Lesson 1: Blocking API
 - Traditional REST API
@@ -247,6 +247,13 @@ graph = builder.compile(
 - Human approval for tool execution
 - Async tool execution
 - Security through approval workflow
+
+#### Lesson 4: Custom Gen AI Workflow
+- Multi-stage workflow: Research → Draft → Review → Finalize
+- Comprehensive HITL pattern with multiple AI nodes
+- Real-time streaming of each stage
+- Iterative refinement support
+- Advanced state management with revision tracking
 
 ### Core Capabilities
 
@@ -385,8 +392,10 @@ graph.update_state(config, {"status": "approved"})
 
 ### Demo Scenarios
 
-- Basic Q&A with feedback
-- Content refinement workflow
+- Basic Q&A with feedback (Lesson 1)
+- Real-time streaming responses (Lesson 2)
+- MCP tool calling with approval (Lesson 3)
+- Multi-stage Gen AI workflow (Lesson 4)
 - Multi-turn conversation
 - Error handling demonstration
 
@@ -408,6 +417,8 @@ graph.update_state(config, {"status": "approved"})
 - ✅ Real-time streaming implementation
 - ✅ State management in AI workflows
 - ✅ Frontend-backend integration
+- ✅ Multi-stage workflow orchestration
+- ✅ Iterative refinement patterns
 
 ### Project Repository
 
@@ -464,9 +475,10 @@ graph.update_state(config, {"status": "approved"})
 
 - Have the application running locally
 - Prepare example questions and feedback scenarios
-- Test all three lessons (blocking, streaming, MCP)
+- Test all four lessons (blocking, streaming, MCP, custom workflow)
 - Be ready to show error handling
 - Have the API documentation page ready
+- Demonstrate the multi-stage workflow progression
 
 ### Q&A Preparation
 
@@ -634,9 +646,9 @@ The LangGraph workflow remains the same - only the model initialization changes.
 
 ---
 
-### Q9: What's the difference between the three lessons (blocking, streaming, MCP)?
+### Q9: What's the difference between the four lessons (blocking, streaming, MCP, custom workflow)?
 
-**Answer:** The three lessons demonstrate different implementation patterns:
+**Answer:** The four lessons demonstrate different implementation patterns:
 
 **Lesson 1: Blocking API**
 - **Pattern:** Traditional REST API with synchronous request/response
@@ -658,6 +670,13 @@ The LangGraph workflow remains the same - only the model initialization changes.
 - **Use Case:** Actions that require safety/security (API calls, data modifications)
 - **Pros:** Security through human oversight, prevents unauthorized actions
 - **Cons:** Requires additional setup (Docker for MCP servers)
+
+**Lesson 4: Custom Gen AI Workflow**
+- **Pattern:** Multi-stage workflow with multiple AI nodes and HITL integration
+- **Flow:** Research → Draft → Human Review (pause) → Refine (if needed) → Finalize
+- **Use Case:** Complex content generation requiring research, drafting, and refinement
+- **Pros:** Comprehensive workflow, iterative refinement, production-ready pattern
+- **Cons:** More complex state management, requires careful workflow design
 
 Each lesson builds on the previous one, showing progression from simple to advanced patterns.
 
