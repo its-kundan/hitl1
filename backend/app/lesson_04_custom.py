@@ -109,13 +109,46 @@ async def stream_custom_workflow(request: Request, thread_id: str):
                 # Stream messages from specific nodes
                 node_name = metadata.get('langgraph_node', '')
                 if node_name in ['research', 'draft', 'finalize']:
-                    # Include node information in the token data
-                    token_data = json.dumps({
-                        "content": msg.content,
-                        "node": node_name
-                    })
-                    print(f"DEBUG: Sending token event from {node_name} with data: {token_data[:50]}...")
-                    yield {"event": "token", "data": token_data}
+                    # Safely extract content from message
+                    try:
+                        # Handle different message types and content formats
+                        content = None
+                        if hasattr(msg, 'content'):
+                            content = msg.content
+                        elif isinstance(msg, dict):
+                            content = msg.get('content', '')
+                        elif hasattr(msg, 'get'):
+                            content = msg.get('content', '')
+                        else:
+                            content = str(msg) if msg else ''
+                        
+                        # Ensure content is a string and handle None/empty cases
+                        if content is None:
+                            content = ''
+                        else:
+                            content = str(content)
+                        
+                        # Include node information in the token data
+                        token_data = json.dumps({
+                            "content": content,
+                            "node": node_name
+                        }, ensure_ascii=False)
+                        print(f"DEBUG: Sending token event from {node_name} with data: {token_data[:50]}...")
+                        yield {"event": "token", "data": token_data}
+                    except (AttributeError, TypeError, ValueError) as e:
+                        print(f"DEBUG: Error processing message content: {str(e)}, msg type: {type(msg)}")
+                        # Try to get string representation as fallback
+                        try:
+                            content = str(msg) if msg else ''
+                            token_data = json.dumps({
+                                "content": content,
+                                "node": node_name
+                            }, ensure_ascii=False)
+                            yield {"event": "token", "data": token_data}
+                        except Exception as fallback_error:
+                            print(f"DEBUG: Fallback also failed: {str(fallback_error)}")
+                            # Skip this message if we can't process it
+                            continue
             
             # After streaming completes, check if human feedback is needed
             state = custom_graph.get_state(config)

@@ -9,6 +9,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.prebuilt import create_react_agent
 from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain_community.chat_models import ChatOllama
 
 
 def load_mcp_servers(config_path):
@@ -100,8 +101,11 @@ async def get_agent():
     
     tools_with_hitl = await get_mcp_tools_with_hitl()
     
+    # Using Ollama with llama2:latest locally
+    ollama_model = ChatOllama(model="llama2:latest", base_url="http://localhost:11434")
+    
     agent = create_react_agent(
-        model="openai:gpt-4o-mini",
+        model=ollama_model,
         prompt="You are a GitHub Assistant that helps users manage their GitHub repositories and workflows.",
         tools=tools_with_hitl,
         checkpointer=_cached_checkpointer,  # Shared across all agents

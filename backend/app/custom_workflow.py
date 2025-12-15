@@ -1,6 +1,6 @@
 from typing import Literal, Optional
 from langgraph.graph import StateGraph, MessagesState, START, END
-from langchain_openai import ChatOpenAI
+from langchain_community.chat_models import ChatOllama
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.checkpoint.memory import MemorySaver
 from dotenv import load_dotenv
@@ -10,8 +10,8 @@ import os
 load_dotenv()
 
 # --- Model Definition ---
-# OpenAI API key configured in .env file
-model = ChatOpenAI(model="gpt-4o-mini", api_key=os.getenv("OPENAI_API_KEY"))
+# Using Ollama with llama2:latest locally
+model = ChatOllama(model="llama2:latest", base_url="http://localhost:11434")
 
 
 # --- Graph State Definition ---

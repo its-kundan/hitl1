@@ -180,3 +180,6 @@ If `ALLOWED_ORIGINS` is not set, defaults to:
 - `frontend/src/AssistantService.js` - Already using BASE_URL (no changes needed)
 
 
+
+
+

@@ -3,6 +3,7 @@ import AssistantService from "./AssistantService";
 import ReactMarkdown from "react-markdown";
 import CustomWorkflowDemo from "./CustomWorkflowDemo";
 import DataAnalysisDemo from "./DataAnalysisDemo";
+import EditableContentDemo from "./EditableContentDemo";
 import "./App.css";
 
 // Flag to toggle between blocking API and streaming API
@@ -802,6 +803,12 @@ const App = () => {
             >
               Data Analysis (CSV)
             </button>
+            <button 
+              onClick={() => setWorkflowMode("editable")}
+              className={workflowMode === "editable" ? "active" : ""}
+            >
+              Sentence Editing
+            </button>
           </div>
 
           <div className="navbar-right">
@@ -830,6 +837,7 @@ const App = () => {
       
       {workflowMode === "custom" ? <CustomWorkflowDemo /> : 
        workflowMode === "data-analysis" ? <DataAnalysisDemo /> : 
+       workflowMode === "editable" ? <EditableContentDemo /> :
        <BasicApp />}
     </div>
   );

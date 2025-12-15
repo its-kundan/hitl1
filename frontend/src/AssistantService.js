@@ -93,6 +93,9 @@ export default class AssistantService {
   static streamResponse(thread_id, onMessageCallback, onErrorCallback, onCompleteCallback) {
     // Create a new EventSource connection to the streaming endpoint
     let eventSource;
+    let streamCompletedNormally = false;
+    let hasReceivedStatusEvent = false;
+    
     try {
       eventSource = new EventSource(`${BASE_URL}/graph/stream/${thread_id}`);
     } catch (error) {
@@ -117,13 +120,18 @@ export default class AssistantService {
         const data = JSON.parse(event.data);
         onMessageCallback({ status: data.status });
         
-        // Mark that we've received a status event for this connection
-        // This helps us distinguish between normal completion and errors
-        if (!window._hasReceivedStatusEvent) {
-          window._hasReceivedStatusEvent = {};
-        }
-        window._hasReceivedStatusEvent[eventSource.url] = true;
+        // Mark that we've received a status event indicating normal completion
+        hasReceivedStatusEvent = true;
         console.log("Received status event, marking connection for normal closure");
+        
+        // Close the connection after a short delay to allow final messages to be processed
+        setTimeout(() => {
+          if (!streamCompletedNormally) {
+            streamCompletedNormally = true;
+            eventSource.close();
+            onCompleteCallback();
+          }
+        }, 100);
       } catch (error) {
         console.error("Error parsing status event:", error, "Raw data:", event.data);
         onErrorCallback(error);
@@ -139,45 +147,59 @@ export default class AssistantService {
       console.log("Stream resumed:", event.data);
     });
     
-    // Handle error events from the backend
+    // Handle error events from the backend (explicit error events, not connection errors)
     eventSource.addEventListener('error', (event) => {
       try {
         const data = JSON.parse(event.data);
         const errorMessage = data.error || "Unknown error occurred";
         console.error("Backend error event:", errorMessage);
+        streamCompletedNormally = true; // Prevent onerror from firing
         eventSource.close();
         onErrorCallback(new Error(errorMessage));
       } catch (error) {
         console.error("Error parsing error event:", error, "Raw data:", event.data);
+        streamCompletedNormally = true;
         eventSource.close();
         onErrorCallback(new Error(event.data || "Unknown error occurred"));
       }
     });
     
-    // Handle connection errors
+    // Handle connection errors (this fires when the connection closes)
     eventSource.onerror = (error) => {
+      // If we've already handled completion or error, ignore this
+      if (streamCompletedNormally) {
+        return;
+      }
+      
       console.log("SSE connection state change - readyState:", eventSource.readyState);
       
-      // Check if we've received a status event indicating completion
-      const hasReceivedStatusEvent = window._hasReceivedStatusEvent && window._hasReceivedStatusEvent[eventSource.url];
-      
+      // If we received a status event, this is a normal closure
       if (hasReceivedStatusEvent) {
         console.log("Stream completed normally after receiving status event");
+        streamCompletedNormally = true;
         eventSource.close();
         onCompleteCallback();
         return;
       }
       
-      // Only call the error callback if it's a real error, not a normal close
-      if (eventSource.readyState !== EventSource.CLOSED && eventSource.readyState !== EventSource.CONNECTING) {
-        console.error("SSE connection error:", error);
-        eventSource.close();
-        // Pass a proper error object with a message to avoid 'undefined' errors
-        onErrorCallback(new Error("Connection error or server disconnected"));
+      // If the connection is closed or closing, and we haven't received a status event,
+      // check if it's a real error or just a normal close
+      if (eventSource.readyState === EventSource.CLOSED) {
+        // Connection is closed - if we haven't received a status event, it might be an error
+        // But wait a bit to see if status event arrives (race condition)
+        setTimeout(() => {
+          if (!hasReceivedStatusEvent && !streamCompletedNormally) {
+            console.error("SSE connection closed without status event - treating as error");
+            streamCompletedNormally = true;
+            onErrorCallback(new Error("Connection closed unexpectedly"));
+          }
+        }, 500);
+      } else if (eventSource.readyState === EventSource.CONNECTING) {
+        // Still connecting - not an error yet
+        console.log("SSE still connecting...");
       } else {
-        // If it's a normal close or reconnecting, call the complete callback
-        console.log("Stream completed normally");
-        onCompleteCallback();
+        // OPEN state but error fired - might be a real error
+        console.log("SSE in OPEN state with error event - monitoring...");
       }
     };
     
@@ -231,6 +253,9 @@ export default class AssistantService {
   static streamCustomWorkflow(thread_id, onMessageCallback, onErrorCallback, onCompleteCallback) {
     // Create a new EventSource connection to the custom workflow streaming endpoint
     let eventSource;
+    let streamCompletedNormally = false;
+    let hasReceivedStatusEvent = false;
+    
     try {
       eventSource = new EventSource(`${BASE_URL}/custom/stream/${thread_id}`);
     } catch (error) {
@@ -263,12 +288,18 @@ export default class AssistantService {
           final_output: data.final_output
         });
         
-        // Mark that we've received a status event for this connection
-        if (!window._hasReceivedStatusEvent) {
-          window._hasReceivedStatusEvent = {};
-        }
-        window._hasReceivedStatusEvent[eventSource.url] = true;
+        // Mark that we've received a status event indicating normal completion
+        hasReceivedStatusEvent = true;
         console.log("Received status event, marking connection for normal closure");
+        
+        // Close the connection after a short delay to allow final messages to be processed
+        setTimeout(() => {
+          if (!streamCompletedNormally) {
+            streamCompletedNormally = true;
+            eventSource.close();
+            onCompleteCallback();
+          }
+        }, 100);
       } catch (error) {
         console.error("Error parsing status event:", error, "Raw data:", event.data);
         onErrorCallback(error);
@@ -284,41 +315,59 @@ export default class AssistantService {
       console.log("Custom workflow stream resumed:", event.data);
     });
     
-    // Handle error events from the backend
+    // Handle error events from the backend (explicit error events, not connection errors)
     eventSource.addEventListener('error', (event) => {
       try {
         const data = JSON.parse(event.data);
         const errorMessage = data.error || "Unknown error occurred";
         console.error("Backend error event:", errorMessage);
+        streamCompletedNormally = true; // Prevent onerror from firing
         eventSource.close();
         onErrorCallback(new Error(errorMessage));
       } catch (error) {
         console.error("Error parsing error event:", error, "Raw data:", event.data);
+        streamCompletedNormally = true;
         eventSource.close();
         onErrorCallback(new Error(event.data || "Unknown error occurred"));
       }
     });
     
-    // Handle connection errors (same pattern as streamResponse)
+    // Handle connection errors (this fires when the connection closes)
     eventSource.onerror = (error) => {
+      // If we've already handled completion or error, ignore this
+      if (streamCompletedNormally) {
+        return;
+      }
+      
       console.log("SSE connection state change - readyState:", eventSource.readyState);
       
-      const hasReceivedStatusEvent = window._hasReceivedStatusEvent && window._hasReceivedStatusEvent[eventSource.url];
-      
+      // If we received a status event, this is a normal closure
       if (hasReceivedStatusEvent) {
         console.log("Stream completed normally after receiving status event");
+        streamCompletedNormally = true;
         eventSource.close();
         onCompleteCallback();
         return;
       }
       
-      if (eventSource.readyState !== EventSource.CLOSED && eventSource.readyState !== EventSource.CONNECTING) {
-        console.error("SSE connection error:", error);
-        eventSource.close();
-        onErrorCallback(new Error("Connection error or server disconnected"));
+      // If the connection is closed or closing, and we haven't received a status event,
+      // check if it's a real error or just a normal close
+      if (eventSource.readyState === EventSource.CLOSED) {
+        // Connection is closed - if we haven't received a status event, it might be an error
+        // But wait a bit to see if status event arrives (race condition)
+        setTimeout(() => {
+          if (!hasReceivedStatusEvent && !streamCompletedNormally) {
+            console.error("SSE connection closed without status event - treating as error");
+            streamCompletedNormally = true;
+            onErrorCallback(new Error("Connection closed unexpectedly"));
+          }
+        }, 500);
+      } else if (eventSource.readyState === EventSource.CONNECTING) {
+        // Still connecting - not an error yet
+        console.log("SSE still connecting...");
       } else {
-        console.log("Stream completed normally");
-        onCompleteCallback();
+        // OPEN state but error fired - might be a real error
+        console.log("SSE in OPEN state with error event - monitoring...");
       }
     };
     
@@ -351,6 +400,9 @@ export default class AssistantService {
   static streamDataAnalysis(thread_id, onMessageCallback, onErrorCallback, onCompleteCallback) {
     // Create a new EventSource connection to the data analysis streaming endpoint
     let eventSource;
+    let streamCompletedNormally = false;
+    let hasReceivedStatusEvent = false;
+    
     try {
       eventSource = new EventSource(`${BASE_URL}/data-analysis/stream/${thread_id}`);
     } catch (error) {
@@ -387,12 +439,18 @@ export default class AssistantService {
           current_stage: data.current_stage
         });
         
-        // Mark that we've received a status event for this connection
-        if (!window._hasReceivedStatusEvent) {
-          window._hasReceivedStatusEvent = {};
-        }
-        window._hasReceivedStatusEvent[eventSource.url] = true;
+        // Mark that we've received a status event indicating normal completion
+        hasReceivedStatusEvent = true;
         console.log("Received status event, marking connection for normal closure");
+        
+        // Close the connection after a short delay to allow final messages to be processed
+        setTimeout(() => {
+          if (!streamCompletedNormally) {
+            streamCompletedNormally = true;
+            eventSource.close();
+            onCompleteCallback();
+          }
+        }, 100);
       } catch (error) {
         console.error("Error parsing status event:", error, "Raw data:", event.data);
         onErrorCallback(error);
@@ -408,41 +466,59 @@ export default class AssistantService {
       console.log("Data analysis stream resumed:", event.data);
     });
     
-    // Handle error events from the backend
+    // Handle error events from the backend (explicit error events, not connection errors)
     eventSource.addEventListener('error', (event) => {
       try {
         const data = JSON.parse(event.data);
         const errorMessage = data.error || "Unknown error occurred";
         console.error("Backend error event:", errorMessage);
+        streamCompletedNormally = true; // Prevent onerror from firing
         eventSource.close();
         onErrorCallback(new Error(errorMessage));
       } catch (error) {
         console.error("Error parsing error event:", error, "Raw data:", event.data);
+        streamCompletedNormally = true;
         eventSource.close();
         onErrorCallback(new Error(event.data || "Unknown error occurred"));
       }
     });
     
-    // Handle connection errors (same pattern as other stream methods)
+    // Handle connection errors (this fires when the connection closes)
     eventSource.onerror = (error) => {
+      // If we've already handled completion or error, ignore this
+      if (streamCompletedNormally) {
+        return;
+      }
+      
       console.log("SSE connection state change - readyState:", eventSource.readyState);
       
-      const hasReceivedStatusEvent = window._hasReceivedStatusEvent && window._hasReceivedStatusEvent[eventSource.url];
-      
+      // If we received a status event, this is a normal closure
       if (hasReceivedStatusEvent) {
         console.log("Stream completed normally after receiving status event");
+        streamCompletedNormally = true;
         eventSource.close();
         onCompleteCallback();
         return;
       }
       
-      if (eventSource.readyState !== EventSource.CLOSED && eventSource.readyState !== EventSource.CONNECTING) {
-        console.error("SSE connection error:", error);
-        eventSource.close();
-        onErrorCallback(new Error("Connection error or server disconnected"));
+      // If the connection is closed or closing, and we haven't received a status event,
+      // check if it's a real error or just a normal close
+      if (eventSource.readyState === EventSource.CLOSED) {
+        // Connection is closed - if we haven't received a status event, it might be an error
+        // But wait a bit to see if status event arrives (race condition)
+        setTimeout(() => {
+          if (!hasReceivedStatusEvent && !streamCompletedNormally) {
+            console.error("SSE connection closed without status event - treating as error");
+            streamCompletedNormally = true;
+            onErrorCallback(new Error("Connection closed unexpectedly"));
+          }
+        }, 500);
+      } else if (eventSource.readyState === EventSource.CONNECTING) {
+        // Still connecting - not an error yet
+        console.log("SSE still connecting...");
       } else {
-        console.log("Stream completed normally");
-        onCompleteCallback();
+        // OPEN state but error fired - might be a real error
+        console.log("SSE in OPEN state with error event - monitoring...");
       }
     };
     
@@ -473,5 +549,236 @@ export default class AssistantService {
       }
       throw error;
     }
+  }
+
+  // Editable Workflow API methods (Lesson 6 - Sentence-Level Editing)
+  static async createEditableWorkflow(human_request) {
+    try {
+      const response = await fetch(`${BASE_URL}/editable/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ human_request })
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Backend error (${response.status}): ${errorText || 'Network response was not ok'}`);
+      }
+      return response.json();
+    } catch (error) {
+      if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+        throw new Error(`Cannot connect to backend at ${BASE_URL}. Make sure the backend server is running.`);
+      }
+      throw error;
+    }
+  }
+
+  static async getSentences(thread_id) {
+    try {
+      const response = await fetch(`${BASE_URL}/editable/sentences/${thread_id}`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" }
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Backend error (${response.status}): ${errorText || 'Network response was not ok'}`);
+      }
+      return response.json();
+    } catch (error) {
+      if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+        throw new Error(`Cannot connect to backend at ${BASE_URL}. Make sure the backend server is running.`);
+      }
+      throw error;
+    }
+  }
+
+  static async editSentence(thread_id, sentence_id, edited_text) {
+    try {
+      const response = await fetch(`${BASE_URL}/editable/edit-sentence`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ thread_id, sentence_id, edited_text })
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Backend error (${response.status}): ${errorText || 'Network response was not ok'}`);
+      }
+      return response.json();
+    } catch (error) {
+      if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+        throw new Error(`Cannot connect to backend at ${BASE_URL}. Make sure the backend server is running.`);
+      }
+      throw error;
+    }
+  }
+
+  static async feedbackSentence(thread_id, sentence_id, feedback) {
+    try {
+      const response = await fetch(`${BASE_URL}/editable/feedback-sentence`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ thread_id, sentence_id, feedback })
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Backend error (${response.status}): ${errorText || 'Network response was not ok'}`);
+      }
+      return response.json();
+    } catch (error) {
+      if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+        throw new Error(`Cannot connect to backend at ${BASE_URL}. Make sure the backend server is running.`);
+      }
+      throw error;
+    }
+  }
+
+  static async resumeEditableWorkflow({ thread_id, review_action, edited_sentences, sentence_feedback, human_comment }) {
+    try {
+      const body = { thread_id, review_action };
+      if (edited_sentences) body.edited_sentences = edited_sentences;
+      if (sentence_feedback) body.sentence_feedback = sentence_feedback;
+      if (human_comment) body.human_comment = human_comment;
+      const response = await fetch(`${BASE_URL}/editable/resume`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Backend error (${response.status}): ${errorText || 'Network response was not ok'}`);
+      }
+      return response.json();
+    } catch (error) {
+      if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+        throw new Error(`Cannot connect to backend at ${BASE_URL}. Make sure the backend server is running.`);
+      }
+      throw error;
+    }
+  }
+
+  static streamEditableWorkflow(thread_id, onMessageCallback, onErrorCallback, onCompleteCallback) {
+    // Create a new EventSource connection to the editable workflow streaming endpoint
+    let eventSource;
+    let streamCompletedNormally = false;
+    let hasReceivedStatusEvent = false;
+    
+    try {
+      eventSource = new EventSource(`${BASE_URL}/editable/stream/${thread_id}`);
+    } catch (error) {
+      onErrorCallback(new Error(`Cannot connect to backend at ${BASE_URL}. Make sure the backend server is running.`));
+      return null;
+    }
+    
+    // Handle token events (content streaming from various nodes)
+    eventSource.addEventListener('token', (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        onMessageCallback({ 
+          content: data.content,
+          node: data.node
+        });
+      } catch (error) {
+        console.error("Error parsing token event:", error, "Raw data:", event.data);
+        onErrorCallback(error);
+      }
+    });
+    
+    // Handle status events (editing, finished)
+    eventSource.addEventListener('status', (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        onMessageCallback({ 
+          status: data.status,
+          current_content: data.current_content,
+          sentences: data.sentences,
+          revision_count: data.revision_count,
+          final_output: data.final_output
+        });
+        
+        hasReceivedStatusEvent = true;
+        console.log("Received status event, marking connection for normal closure");
+        
+        setTimeout(() => {
+          if (!streamCompletedNormally) {
+            streamCompletedNormally = true;
+            eventSource.close();
+            onCompleteCallback();
+          }
+        }, 100);
+      } catch (error) {
+        console.error("Error parsing status event:", error, "Raw data:", event.data);
+        onErrorCallback(error);
+      }
+    });
+    
+    // Handle start/resume events
+    eventSource.addEventListener('start', (event) => {
+      console.log("Editable workflow stream started:", event.data);
+    });
+    
+    eventSource.addEventListener('resume', (event) => {
+      console.log("Editable workflow stream resumed:", event.data);
+    });
+    
+    // Handle error events from the backend
+    eventSource.addEventListener('error', (event) => {
+      try {
+        // Check if event.data exists and is not undefined
+        if (event.data && event.data !== 'undefined') {
+          const data = JSON.parse(event.data);
+          const errorMessage = data.error || "Unknown error occurred";
+          console.error("Backend error event:", errorMessage);
+          streamCompletedNormally = true;
+          eventSource.close();
+          onErrorCallback(new Error(errorMessage));
+        } else {
+          // If event.data is undefined or empty, it might be a connection error
+          // Don't treat it as an error if we've already received a status event
+          if (!hasReceivedStatusEvent) {
+            console.log("Error event with no data - likely connection issue");
+          }
+        }
+      } catch (error) {
+        // Only log and callback if we have actual error data
+        if (event.data && event.data !== 'undefined') {
+          console.error("Error parsing error event:", error, "Raw data:", event.data);
+          streamCompletedNormally = true;
+          eventSource.close();
+          onErrorCallback(new Error(event.data || "Unknown error occurred"));
+        }
+      }
+    });
+    
+    // Handle connection errors
+    eventSource.onerror = (error) => {
+      if (streamCompletedNormally) {
+        return;
+      }
+      
+      console.log("SSE connection state change - readyState:", eventSource.readyState);
+      
+      if (hasReceivedStatusEvent) {
+        console.log("Stream completed normally after receiving status event");
+        streamCompletedNormally = true;
+        eventSource.close();
+        onCompleteCallback();
+        return;
+      }
+      
+      if (eventSource.readyState === EventSource.CLOSED) {
+        setTimeout(() => {
+          if (!hasReceivedStatusEvent && !streamCompletedNormally) {
+            console.error("SSE connection closed without status event - treating as error");
+            streamCompletedNormally = true;
+            onErrorCallback(new Error("Connection closed unexpectedly"));
+          }
+        }, 500);
+      } else if (eventSource.readyState === EventSource.CONNECTING) {
+        console.log("SSE still connecting...");
+      } else {
+        console.log("SSE in OPEN state with error event - monitoring...");
+      }
+    };
+    
+    return eventSource;
   }
 }

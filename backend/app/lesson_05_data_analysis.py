@@ -184,11 +184,44 @@ async def stream_data_analysis(request: Request, thread_id: str):
                 node_name = metadata.get('langgraph_node', '')
                 if node_name in ['data_exploration', 'analysis_planning', 'code_generation', 
                                 'code_execution', 'visualization_generation', 'finalize']:
-                    token_data = json.dumps({
-                        "content": msg.content,
-                        "node": node_name
-                    })
-                    yield {"event": "token", "data": token_data}
+                    # Safely extract content from message
+                    try:
+                        # Handle different message types and content formats
+                        content = None
+                        if hasattr(msg, 'content'):
+                            content = msg.content
+                        elif isinstance(msg, dict):
+                            content = msg.get('content', '')
+                        elif hasattr(msg, 'get'):
+                            content = msg.get('content', '')
+                        else:
+                            content = str(msg) if msg else ''
+                        
+                        # Ensure content is a string and handle None/empty cases
+                        if content is None:
+                            content = ''
+                        else:
+                            content = str(content)
+                        
+                        token_data = json.dumps({
+                            "content": content,
+                            "node": node_name
+                        }, ensure_ascii=False)
+                        yield {"event": "token", "data": token_data}
+                    except (AttributeError, TypeError, ValueError) as e:
+                        print(f"DEBUG: Error processing message content: {str(e)}, msg type: {type(msg)}")
+                        # Try to get string representation as fallback
+                        try:
+                            content = str(msg) if msg else ''
+                            token_data = json.dumps({
+                                "content": content,
+                                "node": node_name
+                            }, ensure_ascii=False)
+                            yield {"event": "token", "data": token_data}
+                        except Exception as fallback_error:
+                            print(f"DEBUG: Fallback also failed: {str(fallback_error)}")
+                            # Skip this message if we can't process it
+                            continue
             
             # After streaming completes, check if human feedback is needed
             state = data_analysis_graph.get_state(config)
@@ -256,9 +289,22 @@ async def stream_data_analysis(request: Request, thread_id: str):
                 del run_configs[thread_id]
                 
         except Exception as e:
+            error_msg = str(e) if e else "Unknown error occurred"
+            print(f"DEBUG: Exception in event_generator: {error_msg}, type: {type(e)}")
             import traceback
             traceback.print_exc()
-            yield {"event": "error", "data": json.dumps({"error": str(e)})}
+            try:
+                # Safely serialize error message
+                error_data = json.dumps({"error": error_msg}, ensure_ascii=False)
+                yield {"event": "error", "data": error_data}
+            except Exception as json_error:
+                # If JSON serialization fails, send a simple error message
+                print(f"DEBUG: Failed to serialize error to JSON: {str(json_error)}")
+                try:
+                    yield {"event": "error", "data": json.dumps({"error": "An error occurred during streaming"})}
+                except:
+                    # Last resort - just skip the error event
+                    pass
             
             # Clean up on error as well
             if thread_id in run_configs:
