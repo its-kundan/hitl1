@@ -1,16 +1,16 @@
-from typing import Literal, Optional
+from typing import Literal, Optional, List
 from langgraph.graph import StateGraph, MessagesState, START, END
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.checkpoint.memory import MemorySaver
 from dotenv import load_dotenv
 import os
+import json
 
-# Load environment variables before initializing the model
+# Load environment variables
 load_dotenv()
 
 # --- Model Definition ---
-# OpenAI API key configured in .env file
 model = ChatOpenAI(model="gpt-4o-mini", api_key=os.getenv("OPENAI_API_KEY"))
 
 
@@ -18,198 +18,177 @@ model = ChatOpenAI(model="gpt-4o-mini", api_key=os.getenv("OPENAI_API_KEY"))
 class CustomWorkflowState(MessagesState):
     user_query: str
     research_results: Optional[str] = None
-    draft_content: Optional[str] = None
+    
+    # Planning & Iteration State
+    plan: List[str] = []             # List of section titles/topics
+    current_section_index: int = 0
+    generated_sections: List[str] = [] # The content for each section
+    
+    # Feedback & Interaction State
     human_feedback: Optional[str] = None
     approval_status: Literal["pending", "approved", "feedback"] = "pending"
     final_output: Optional[str] = None
+    
     revision_count: int = 0
 
 
 # --- Graph Nodes Definition ---
 
 def research_node(state: CustomWorkflowState) -> CustomWorkflowState:
-    """
-    Node 1: Research and gather information about the user's query.
-    This demonstrates how AI can gather context before creating content.
-    """
+    """Node 1: Gather context."""
     system_message = SystemMessage(content="""
-    You are a research assistant. Your task is to provide comprehensive, 
-    well-structured research on the given topic. Include key points, 
-    important facts, and relevant context that would be useful for creating 
-    high-quality content on this topic.
+    You are a research assistant. Provide clear, key information about the topic.
+    Format it as a concise summary.
+    """)
+    response = model.invoke([system_message, HumanMessage(content=state['user_query'])])
     
-    Format your research in a clear, organized manner that can be easily 
-    used as a foundation for content creation.
+    return {
+        "research_results": response.content,
+        "messages": [response]
+    }
+
+def plan_node(state: CustomWorkflowState) -> CustomWorkflowState:
+    """Node 2: Create a writing plan (sections)."""
+    system_message = SystemMessage(content="""
+    You are a content strategist. Return a JSON list of section titles for the user's request.
+    Example: ["Introduction", "Benefits", "Conclusion"]
+    Return ONLY valid JSON.
     """)
     
-    user_message = HumanMessage(content=f"Research topic: {state['user_query']}")
+    user_msg = HumanMessage(content=f"Query: {state['user_query']}\nResearch Summary: {state.get('research_results', '')[:500]}")
     
-    response = model.invoke([system_message, user_message])
+    response = model.invoke([system_message, user_msg])
     
-    all_messages = state["messages"] + [response]
-    
+    try:
+        # Simple cleaning to ensure we parse the array
+        content = response.content.replace("```json", "").replace("```", "").strip()
+        plan = json.loads(content)
+        if not isinstance(plan, list):
+            plan = ["General Overview"] # Fallback
+    except:
+        plan = ["Content Generation"] # Fallback
+        
     return {
-        **state,
-        "messages": all_messages,
-        "research_results": response.content
+        "plan": plan,
+        "current_section_index": 0,
+        "generated_sections": [],
+        "messages": [response]
     }
 
-
-def draft_node(state: CustomWorkflowState) -> CustomWorkflowState:
-    """
-    Node 2: Create a draft based on research and user query.
-    This node incorporates feedback if the user requested revisions.
-    """
-    status = state.get("approval_status", "pending")
+def generate_section_node(state: CustomWorkflowState) -> CustomWorkflowState:
+    """Node 3: Generate or revise a specific section."""
+    plan = state["plan"]
+    idx = state["current_section_index"]
+    current_topic = plan[idx] if idx < len(plan) else "Final Summary"
     
-    if status == "feedback" and state.get("human_feedback"):
-        # Incorporate human feedback into the draft
-        system_message = SystemMessage(content=f"""
-        You are a content creator revising your previous draft based on human feedback.
+    # Check if we are revising based on feedback
+    if state.get("approval_status") == "feedback" and state.get("human_feedback"):
+        # Revision Mode
+        prompt = f"""
+        You are revising the section "{current_topic}".
         
-        FEEDBACK FROM HUMAN: "{state['human_feedback']}"
+        FEEDBACK: {state['human_feedback']}
         
-        Carefully incorporate this feedback into your content. Address all comments, 
-        corrections, or suggestions. Ensure your revised draft fully integrates 
-        the feedback while maintaining quality and coherence.
+        Previous draft:
+        {state['generated_sections'][idx] if idx < len(state['generated_sections']) else ""}
         
-        DO NOT repeat the feedback verbatim in your response.
-        """)
-        
-        research_msg = HumanMessage(content=f"Research context: {state.get('research_results', 'No research available')}")
-        draft_msg = HumanMessage(content=f"Previous draft: {state.get('draft_content', 'No previous draft')}")
-        feedback_msg = HumanMessage(content=f"User query: {state['user_query']}")
-        
-        messages = [system_message, research_msg, draft_msg, feedback_msg]
-        all_messages = state["messages"]
-        
+        Rewrite this section incorporating the feedback.
+        """
     else:
-        # Create initial draft
-        system_message = SystemMessage(content="""
-        You are a professional content creator. Based on the research provided 
-        and the user's query, create a well-structured, engaging draft. 
+        # Generation Mode
+        previous_content = "\n\n".join(state["generated_sections"])
+        prompt = f"""
+        You are writing the section "{current_topic}" (Section {idx + 1}/{len(plan)}).
         
-        Your draft should:
-        - Be clear and well-organized
-        - Address the user's query comprehensively
-        - Use the research as a foundation but write in your own style
-        - Be ready for human review
+        Context so far:
+        {previous_content}
         
-        Do not reference any previous feedback at this stage.
-        """)
-        
-        research_msg = HumanMessage(content=f"Research: {state.get('research_results', 'No research available')}")
-        query_msg = HumanMessage(content=f"User query: {state['user_query']}")
-        
-        messages = [system_message, research_msg, query_msg]
-        all_messages = state["messages"]
+        Write ONLY the content for "{current_topic}". Do not repeat previous sections.
+        """
     
-    response = model.invoke(messages)
-    all_messages = all_messages + [response]
+    response = model.invoke([SystemMessage(content="You are a helpful content writer."), HumanMessage(content=prompt)])
     
-    revision_count = state.get("revision_count", 0)
-    if status == "feedback":
-        revision_count += 1
-    
+    # Update generated_sections
+    sections = list(state["generated_sections"])
+    if idx < len(sections):
+        sections[idx] = response.content # Replace existing (revision)
+    else:
+        sections.append(response.content) # Append new
+        
     return {
-        **state,
-        "messages": all_messages,
-        "draft_content": response.content,
-        "revision_count": revision_count
+        "generated_sections": sections,
+        "draft_content": response.content, # For potential UI display compatibility
+        "messages": [response]
     }
-
 
 def human_review_node(state: CustomWorkflowState):
-    """
-    Node 3: Human review point (HITL).
-    This is where the graph pauses for human input.
-    The actual review happens via API when the user provides feedback.
-    """
+    """Wait for human input."""
+    # This node doesn't do anything, it's just a pause point.
     pass
 
-
 def finalize_node(state: CustomWorkflowState) -> CustomWorkflowState:
-    """
-    Node 4: Finalize the content after approval.
-    This polishes the approved draft into the final output.
-    """
-    system_message = SystemMessage(content="""
-    You are a content editor. The user has approved the draft. Your task is to 
-    carefully review and polish the approved content, making final improvements 
-    to clarity, tone, and completeness.
-    
-    Ensure the response is:
-    - Polished and professional
-    - Ready for final delivery
-    - Maintains the essence of the approved draft
-    - Has improved flow and readability
-    
-    DO NOT significantly expand or change the content. Focus on polishing 
-    the approved draft that was just reviewed.
-    """)
-    
-    user_message = HumanMessage(content=f"Original query: {state['user_query']}")
-    draft_message = HumanMessage(content=f"Approved draft to finalize: {state.get('draft_content', 'No draft available')}")
-    
-    messages = [system_message, user_message, draft_message]
-    response = model.invoke(messages)
-    
-    all_messages = state["messages"] + [response]
-    
+    """Compile final result."""
+    final_text = "\n\n".join(state["generated_sections"])
     return {
-        **state,
-        "messages": all_messages,
-        "final_output": response.content,
-        "assistant_response": response.content  # For compatibility with existing response models
+        "final_output": final_text,
+        "assistant_response": final_text  # For compatibility
     }
 
-
-# --- Router Function ---
+# --- Router ---
 def review_router(state: CustomWorkflowState) -> str:
-    """
-    Routes the workflow based on human review decision.
-    - If approved: proceed to finalize
-    - If feedback provided: go back to draft with feedback
-    """
-    if state["approval_status"] == "approved":
-        return "finalize"
+    status = state.get("approval_status", "pending")
+    
+    if status == "approved":
+        # Check if there are more sections
+        if state["current_section_index"] < len(state["plan"]) - 1:
+            return "next_section"
+        else:
+            return "finalize"
+    elif status == "feedback":
+        return "revise"
     else:
-        return "draft"  # Go back to draft with feedback
+        # Should technically not happen if paused correctly, but default to repeat
+        return "revise"
 
+def update_section_index(state: CustomWorkflowState) -> CustomWorkflowState:
+    """Helper to increment index after approval."""
+    return {
+        "current_section_index": state["current_section_index"] + 1,
+        "approval_status": "pending", # Reset status for next chunk
+        "human_feedback": None
+    }
 
 # --- Graph Construction ---
 builder = StateGraph(CustomWorkflowState)
 
-# Add all nodes
 builder.add_node("research", research_node)
-builder.add_node("draft", draft_node)
+builder.add_node("plan", plan_node)
+builder.add_node("generate_section", generate_section_node)
+builder.add_node("update_index", update_section_index)
 builder.add_node("human_review", human_review_node)
 builder.add_node("finalize", finalize_node)
 
-# Define the flow
+# Flow
 builder.add_edge(START, "research")
-builder.add_edge("research", "draft")
-builder.add_edge("draft", "human_review")
+builder.add_edge("research", "plan")
+builder.add_edge("plan", "generate_section")
+builder.add_edge("generate_section", "human_review")
+
 builder.add_conditional_edges(
     "human_review",
     review_router,
     {
+        "next_section": "update_index",
         "finalize": "finalize",
-        "draft": "draft"
+        "revise": "generate_section"
     }
 )
+
+builder.add_edge("update_index", "generate_section")
 builder.add_edge("finalize", END)
 
-# Compile with interrupt before human_review for HITL
 memory = MemorySaver()
 custom_graph = builder.compile(
-    interrupt_before=["human_review"],  # Pause here for human input
+    interrupt_before=["human_review"],
     checkpointer=memory
 )
-
-# --- Exports ---
-__all__ = ["custom_graph", "CustomWorkflowState"]
-
-
-
-

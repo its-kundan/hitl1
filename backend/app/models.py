@@ -1,24 +1,22 @@
 from pydantic import BaseModel
-from typing import Optional
-from typing import Literal
-from typing import Literal
+from typing import Optional, List
 
-# --- Start Graph Run ---
 class StartRequest(BaseModel):
     human_request: str
 
-# --- Resume Paused Graph Run ---
 class ResumeRequest(BaseModel):
     thread_id: str
-    review_action: Literal["approved", "feedback"]
+    review_action: str  # "approved" or "feedback"
     human_comment: Optional[str] = None
-
-# --- Minimal API Response ---
-class GraphResponse(BaseModel):
-    thread_id: str
-    run_status: Literal["finished", "user_feedback", "pending"]
-    assistant_response: Optional[str] = None
+    edited_content: Optional[str] = None  # New: Allow user to directly edit the chunk
 
 class ApproveRequest(BaseModel):
     thread_id: str
-    approve_action: Literal["approved", "rejected"]
+    approve_action: str  # "approved" or "rejected"
+
+class GraphResponse(BaseModel):
+    thread_id: str
+    run_status: str
+    assistant_response: Optional[str] = None
+    chunks: List[str] = []         # New: Return mostly for non-streaming access
+    current_chunk_index: int = 0   # New: Track progress

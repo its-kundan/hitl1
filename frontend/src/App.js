@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import AssistantService from "./AssistantService";
 import ReactMarkdown from "react-markdown";
-import CustomWorkflowDemo from "./CustomWorkflowDemo";
+import HitlWorkflow from "./HitlWorkflow";
 import DataAnalysisDemo from "./DataAnalysisDemo";
 import "./App.css";
 
@@ -22,7 +22,7 @@ const BasicApp = () => {
   const startAccumulatedResponseRef = useRef("");
   const approveAccumulatedResponseRef = useRef("");
   const feedbackAccumulatedResponseRef = useRef("");
-  
+
   const feedbackInputRef = useRef(null);
   const messagesEndRef = useRef(null);
 
@@ -36,7 +36,7 @@ const BasicApp = () => {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [history, assistantResponse, uiState]);
-  
+
   // Submit handlers
   const handleStart = async () => {
     if (!question.trim()) return;
@@ -47,7 +47,7 @@ const BasicApp = () => {
       { role: "user", content: question },
       { role: "assistant", content: null } // null means pending/spinner
     ]);
-    
+
     try {
       if (!USE_STREAMING) {
         // Original blocking API call
@@ -63,13 +63,13 @@ const BasicApp = () => {
         // Streaming API call
         const data = await AssistantService.createStreamingConversation(question);
         setThreadId(data.thread_id);
-        
+
         // Initialize an empty response that will be built up token by token
         setAssistantResponse("");
-        
+
         // Reset the accumulated response ref for this session
         startAccumulatedResponseRef.current = "";
-        
+
         // Start streaming the response
         const eventSource = AssistantService.streamResponse(
           data.thread_id,
@@ -78,10 +78,10 @@ const BasicApp = () => {
             if (data.content) {
               // Update our ref with the new content
               startAccumulatedResponseRef.current += data.content;
-              
+
               // Update React state with the accumulated content
               setAssistantResponse(startAccumulatedResponseRef.current);
-              
+
               // Update history with current accumulated response
               setHistory([
                 { role: "user", content: question },
@@ -125,7 +125,7 @@ const BasicApp = () => {
   const handleApprove = async () => {
     setUiState("waiting");
     setHistory([...history, { role: "assistant", content: null }]); // Show spinner
-    
+
     try {
       if (!USE_STREAMING) {
         // Original blocking API call
@@ -146,13 +146,13 @@ const BasicApp = () => {
           thread_id: threadId,
           review_action: "approved"
         });
-        
+
         // Initialize an empty response that will be built up token by token
         setAssistantResponse("");
-        
+
         // Reset the accumulated response ref for this session
         approveAccumulatedResponseRef.current = "";
-        
+
         // Start streaming the response
         const eventSource = AssistantService.streamResponse(
           threadId,
@@ -161,10 +161,10 @@ const BasicApp = () => {
             if (data.content) {
               // Update our ref with the new content
               approveAccumulatedResponseRef.current += data.content;
-              
+
               // Update React state with the accumulated content
               setAssistantResponse(approveAccumulatedResponseRef.current);
-              
+
               // Update the spinner message with the current tokens
               setHistory(prev => [
                 ...prev.slice(0, -1),
@@ -204,14 +204,14 @@ const BasicApp = () => {
 
   const handleFeedback = async () => {
     if (!feedback.trim()) return;
-    
+
     setUiState("waiting");
     setHistory([
       ...history,
       { role: "user", content: feedback },
       { role: "assistant", content: null }
     ]); // Show spinner after feedback
-    
+
     try {
       if (!USE_STREAMING) {
         // Original blocking API call
@@ -235,13 +235,13 @@ const BasicApp = () => {
           review_action: "feedback",
           human_comment: feedback
         });
-        
+
         // Initialize an empty response that will be built up token by token
         setAssistantResponse("");
-        
+
         // Reset the accumulated response ref for this session
         feedbackAccumulatedResponseRef.current = "";
-        
+
         // Start streaming the response
         const eventSource = AssistantService.streamResponse(
           threadId,
@@ -250,10 +250,10 @@ const BasicApp = () => {
             if (data.content) {
               // Update our ref with the new content
               feedbackAccumulatedResponseRef.current += data.content;
-              
+
               // Update React state with the accumulated content
               setAssistantResponse(feedbackAccumulatedResponseRef.current);
-              
+
               // Update the spinner message with the current tokens
               setHistory(prev => [
                 ...prev.slice(0, -1),
@@ -283,7 +283,7 @@ const BasicApp = () => {
             // Final history update is already handled in the message callback
           }
         );
-        
+
         setFeedback(""); // Clear feedback field
       }
     } catch (err) {
@@ -315,7 +315,7 @@ const BasicApp = () => {
           Human-in-the-Loop workflow with LangGraph and FastAPI.
         </div>
       </div>
-      
+
       <div className="chat-container">
         <div className="chat-header">
           <h2>Assistant</h2>
@@ -328,21 +328,21 @@ const BasicApp = () => {
 
         <div className="messages-area">
           {errorMessage && (
-            <div style={{ 
-              padding: '1rem', 
-              margin: '1rem', 
-              backgroundColor: '#fee', 
-              border: '1px solid #fcc', 
+            <div style={{
+              padding: '1rem',
+              margin: '1rem',
+              backgroundColor: '#fee',
+              border: '1px solid #fcc',
               borderRadius: '4px',
               color: '#c33'
             }}>
               <strong>Error:</strong> {errorMessage}
-              <button 
-                onClick={() => setErrorMessage(null)} 
-                style={{ 
-                  float: 'right', 
-                  background: 'none', 
-                  border: 'none', 
+              <button
+                onClick={() => setErrorMessage(null)}
+                style={{
+                  float: 'right',
+                  background: 'none',
+                  border: 'none',
                   cursor: 'pointer',
                   fontSize: '1.2rem',
                   color: '#c33'
@@ -352,7 +352,7 @@ const BasicApp = () => {
               </button>
             </div>
           )}
-          
+
           {history.length === 0 && uiState === "idle" && (
             <div style={{ textAlign: 'center', marginTop: '4rem', color: 'var(--text-secondary)' }}>
               <p>Start a conversation to begin.</p>
@@ -364,7 +364,7 @@ const BasicApp = () => {
             if (uiState === "finished" && msg.role === "assistant" && idx === history.length - 1) {
               return null;
             }
-            
+
             return (
               <div key={idx} className={`message ${msg.role}`}>
                 <div className="message-label">
@@ -382,7 +382,7 @@ const BasicApp = () => {
               </div>
             );
           })}
-          
+
           {uiState === "finished" && (
             <div className="final-version">
               <div className="final-label">
@@ -391,7 +391,7 @@ const BasicApp = () => {
               <ReactMarkdown>{assistantResponse}</ReactMarkdown>
             </div>
           )}
-          
+
           <div ref={messagesEndRef} />
         </div>
 
@@ -433,14 +433,14 @@ const BasicApp = () => {
           )}
 
           {uiState === "idle" && (assistantResponse || (history.length > 0 && history[history.length - 1].role === "assistant" && history[history.length - 1].content)) && (
-             <div className="action-area">
-               <button onClick={() => setUiState("user_feedback")} className="btn-secondary">
-                 Provide Feedback
-               </button>
-               <button onClick={handleApprove} className="btn-primary">
-                 Approve
-               </button>
-             </div>
+            <div className="action-area">
+              <button onClick={() => setUiState("user_feedback")} className="btn-secondary">
+                Provide Feedback
+              </button>
+              <button onClick={handleApprove} className="btn-primary">
+                Approve
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -774,7 +774,7 @@ const App = () => {
       <nav className="navbar">
         <div className="navbar-container">
           <div className="navbar-left">
-            <button 
+            <button
               onClick={handleHome}
               className="navbar-home-btn"
               title="Home"
@@ -782,21 +782,21 @@ const App = () => {
               🏠 Home
             </button>
           </div>
-          
+
           <div className="navbar-center">
-            <button 
+            <button
               onClick={() => setWorkflowMode("basic")}
               className={workflowMode === "basic" ? "active" : ""}
             >
               Basic HITL
             </button>
-            <button 
+            <button
               onClick={() => setWorkflowMode("custom")}
               className={workflowMode === "custom" ? "active" : ""}
             >
-              Custom Workflow (4-Stage)
+              Iterative HITL Generation
             </button>
-            <button 
+            <button
               onClick={() => setWorkflowMode("data-analysis")}
               className={workflowMode === "data-analysis" ? "active" : ""}
             >
@@ -805,14 +805,14 @@ const App = () => {
           </div>
 
           <div className="navbar-right">
-            <button 
+            <button
               onClick={() => setShowDocumentation(true)}
               className="navbar-doc-btn"
               title="Documentation"
             >
               📚 Documentation
             </button>
-            <button 
+            <button
               onClick={toggleTheme}
               className="navbar-theme-btn"
               title={theme === "light" ? "Switch to Dark Mode" : "Switch to Light Mode"}
@@ -822,15 +822,15 @@ const App = () => {
           </div>
         </div>
       </nav>
-      
-      <DocumentationModal 
-        isOpen={showDocumentation} 
-        onClose={() => setShowDocumentation(false)} 
+
+      <DocumentationModal
+        isOpen={showDocumentation}
+        onClose={() => setShowDocumentation(false)}
       />
-      
-      {workflowMode === "custom" ? <CustomWorkflowDemo /> : 
-       workflowMode === "data-analysis" ? <DataAnalysisDemo /> : 
-       <BasicApp />}
+
+      {workflowMode === "custom" ? <HitlWorkflow /> :
+        workflowMode === "data-analysis" ? <DataAnalysisDemo /> :
+          <BasicApp />}
     </div>
   );
 };
