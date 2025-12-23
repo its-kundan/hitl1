@@ -4,6 +4,7 @@ import ReactMarkdown from "react-markdown";
 import CustomWorkflowDemo from "./CustomWorkflowDemo";
 import DataAnalysisDemo from "./DataAnalysisDemo";
 import EditableContentDemo from "./EditableContentDemo";
+import UnifiedWorkflowDemo from "./UnifiedWorkflowDemo";
 import "./App.css";
 
 // Flag to toggle between blocking API and streaming API
@@ -745,8 +746,8 @@ This project is a demonstration of HITL workflows using LangGraph and FastAPI.`}
 // Main App component with workflow mode selection
 const App = () => {
   const [workflowMode, setWorkflowMode] = useState(() => {
-    // Try to get from localStorage, default to "basic"
-    return localStorage.getItem("workflowMode") || "basic";
+    // Try to get from localStorage, default to "unified"
+    return localStorage.getItem("workflowMode") || "unified";
   });
   const [theme, setTheme] = useState(() => localStorage.getItem("theme") || "light");
   const [showDocumentation, setShowDocumentation] = useState(false);
@@ -767,7 +768,7 @@ const App = () => {
   };
 
   const handleHome = () => {
-    setWorkflowMode("basic");
+    setWorkflowMode("unified");
   };
 
   return (
@@ -785,6 +786,13 @@ const App = () => {
           </div>
           
           <div className="navbar-center">
+            <button 
+              onClick={() => setWorkflowMode("unified")}
+              className={workflowMode === "unified" ? "active" : ""}
+              title="Unified Interactive Workflow - All lessons combined"
+            >
+              ⚡ Unified (All Lessons)
+            </button>
             <button 
               onClick={() => setWorkflowMode("basic")}
               className={workflowMode === "basic" ? "active" : ""}
@@ -835,7 +843,8 @@ const App = () => {
         onClose={() => setShowDocumentation(false)} 
       />
       
-      {workflowMode === "custom" ? <CustomWorkflowDemo /> : 
+      {workflowMode === "unified" ? <UnifiedWorkflowDemo /> :
+       workflowMode === "custom" ? <CustomWorkflowDemo /> : 
        workflowMode === "data-analysis" ? <DataAnalysisDemo /> : 
        workflowMode === "editable" ? <EditableContentDemo /> :
        <BasicApp />}

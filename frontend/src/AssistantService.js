@@ -781,4 +781,254 @@ export default class AssistantService {
     
     return eventSource;
   }
+
+  // Unified Workflow API methods (Combines all lessons)
+  static async startUnifiedWorkflow(workflow_type, user_query, file_path = null, file_name = null) {
+    try {
+      const body = { workflow_type, user_query };
+      if (file_path) body.file_path = file_path;
+      if (file_name) body.file_name = file_name;
+      const response = await fetch(`${BASE_URL}/unified/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Backend error (${response.status}): ${errorText || 'Network response was not ok'}`);
+      }
+      return response.json();
+    } catch (error) {
+      if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+        throw new Error(`Cannot connect to backend at ${BASE_URL}. Make sure the backend server is running.`);
+      }
+      throw error;
+    }
+  }
+
+  static async resumeUnifiedWorkflow({ thread_id, workflow_type, action, human_comment, edited_sentences, sentence_feedback }) {
+    try {
+      const body = { thread_id, workflow_type, action };
+      if (human_comment) body.human_comment = human_comment;
+      if (edited_sentences) body.edited_sentences = edited_sentences;
+      if (sentence_feedback) body.sentence_feedback = sentence_feedback;
+      const response = await fetch(`${BASE_URL}/unified/resume`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Backend error (${response.status}): ${errorText || 'Network response was not ok'}`);
+      }
+      return response.json();
+    } catch (error) {
+      if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+        throw new Error(`Cannot connect to backend at ${BASE_URL}. Make sure the backend server is running.`);
+      }
+      throw error;
+    }
+  }
+
+  static async uploadFile(file) {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const response = await fetch(`${BASE_URL}/unified/upload`, {
+        method: "POST",
+        body: formData
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Backend error (${response.status}): ${errorText || 'Network response was not ok'}`);
+      }
+      return response.json();
+    } catch (error) {
+      if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+        throw new Error(`Cannot connect to backend at ${BASE_URL}. Make sure the backend server is running.`);
+      }
+      throw error;
+    }
+  }
+
+  static async interruptWorkflow(thread_id, message) {
+    try {
+      const formData = new FormData();
+      formData.append('thread_id', thread_id);
+      formData.append('message', message);
+      const response = await fetch(`${BASE_URL}/unified/interrupt`, {
+        method: "POST",
+        body: formData
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Backend error (${response.status}): ${errorText || 'Network response was not ok'}`);
+      }
+      return response.json();
+    } catch (error) {
+      if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+        throw new Error(`Cannot connect to backend at ${BASE_URL}. Make sure the backend server is running.`);
+      }
+      throw error;
+    }
+  }
+
+  static async getUnifiedSentences(thread_id) {
+    try {
+      const response = await fetch(`${BASE_URL}/unified/sentences/${thread_id}`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" }
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Backend error (${response.status}): ${errorText || 'Network response was not ok'}`);
+      }
+      return response.json();
+    } catch (error) {
+      if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+        throw new Error(`Cannot connect to backend at ${BASE_URL}. Make sure the backend server is running.`);
+      }
+      throw error;
+    }
+  }
+
+  static streamUnifiedWorkflow(thread_id, onMessageCallback, onErrorCallback, onCompleteCallback) {
+    // Create a new EventSource connection to the unified workflow streaming endpoint
+    let eventSource;
+    let streamCompletedNormally = false;
+    let hasReceivedStatusEvent = false;
+    
+    try {
+      eventSource = new EventSource(`${BASE_URL}/unified/stream/${thread_id}`);
+    } catch (error) {
+      onErrorCallback(new Error(`Cannot connect to backend at ${BASE_URL}. Make sure the backend server is running.`));
+      return null;
+    }
+    
+    // Handle token events (content streaming from any node)
+    eventSource.addEventListener('token', (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        onMessageCallback({ 
+          content: data.content,
+          node: data.node,
+          workflow_type: data.workflow_type
+        });
+      } catch (error) {
+        console.error("Error parsing token event:", error, "Raw data:", event.data);
+        onErrorCallback(error);
+      }
+    });
+    
+    // Handle status events (user_feedback, finished, editing, code_review)
+    eventSource.addEventListener('status', (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        onMessageCallback({ 
+          status: data.status,
+          workflow_type: data.workflow_type,
+          assistant_response: data.assistant_response,
+          draft_content: data.draft_content,
+          final_output: data.final_output,
+          code: data.code,
+          visualization_path: data.visualization_path,
+          visualization_paths: data.visualization_paths,
+          analysis_plan: data.analysis_plan,
+          current_content: data.current_content,
+          sentences: data.sentences,
+          revision_count: data.revision_count,
+          current_stage: data.current_stage
+        });
+        
+        hasReceivedStatusEvent = true;
+        console.log("Received status event, marking connection for normal closure");
+        
+        setTimeout(() => {
+          if (!streamCompletedNormally) {
+            streamCompletedNormally = true;
+            eventSource.close();
+            onCompleteCallback();
+          }
+        }, 100);
+      } catch (error) {
+        console.error("Error parsing status event:", error, "Raw data:", event.data);
+        onErrorCallback(error);
+      }
+    });
+    
+    // Handle start/resume events
+    eventSource.addEventListener('start', (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log("Unified workflow stream started:", data);
+        onMessageCallback({ event: 'start', thread_id: data.thread_id, workflow_type: data.workflow_type });
+      } catch (error) {
+        console.log("Unified workflow stream started:", event.data);
+      }
+    });
+    
+    eventSource.addEventListener('resume', (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log("Unified workflow stream resumed:", data);
+        onMessageCallback({ event: 'resume', thread_id: data.thread_id, workflow_type: data.workflow_type });
+      } catch (error) {
+        console.log("Unified workflow stream resumed:", event.data);
+      }
+    });
+    
+    // Handle error events from the backend
+    eventSource.addEventListener('error', (event) => {
+      try {
+        if (event.data && event.data !== 'undefined') {
+          const data = JSON.parse(event.data);
+          const errorMessage = data.error || "Unknown error occurred";
+          console.error("Backend error event:", errorMessage);
+          streamCompletedNormally = true;
+          eventSource.close();
+          onErrorCallback(new Error(errorMessage));
+        }
+      } catch (error) {
+        if (event.data && event.data !== 'undefined') {
+          console.error("Error parsing error event:", error, "Raw data:", event.data);
+          streamCompletedNormally = true;
+          eventSource.close();
+          onErrorCallback(new Error(event.data || "Unknown error occurred"));
+        }
+      }
+    });
+    
+    // Handle connection errors
+    eventSource.onerror = (error) => {
+      if (streamCompletedNormally) {
+        return;
+      }
+      
+      console.log("SSE connection state change - readyState:", eventSource.readyState);
+      
+      if (hasReceivedStatusEvent) {
+        console.log("Stream completed normally after receiving status event");
+        streamCompletedNormally = true;
+        eventSource.close();
+        onCompleteCallback();
+        return;
+      }
+      
+      if (eventSource.readyState === EventSource.CLOSED) {
+        setTimeout(() => {
+          if (!hasReceivedStatusEvent && !streamCompletedNormally) {
+            console.error("SSE connection closed without status event - treating as error");
+            streamCompletedNormally = true;
+            onErrorCallback(new Error("Connection closed unexpectedly"));
+          }
+        }, 500);
+      } else if (eventSource.readyState === EventSource.CONNECTING) {
+        console.log("SSE still connecting...");
+      } else {
+        console.log("SSE in OPEN state with error event - monitoring...");
+      }
+    };
+    
+    return eventSource;
+  }
 }
