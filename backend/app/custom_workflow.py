@@ -26,6 +26,7 @@ class CustomWorkflowState(MessagesState):
     
     # Feedback & Interaction State
     human_feedback: Optional[str] = None
+    edited_content: Optional[str] = None  # User-edited content for current section
     approval_status: Literal["pending", "approved", "feedback"] = "pending"
     final_output: Optional[str] = None
     
@@ -82,17 +83,32 @@ def generate_section_node(state: CustomWorkflowState) -> CustomWorkflowState:
     current_topic = plan[idx] if idx < len(plan) else "Final Summary"
     
     # Check if we are revising based on feedback
-    if state.get("approval_status") == "feedback" and state.get("human_feedback"):
-        # Revision Mode
-        prompt = f"""
+    if state.get("approval_status") == "feedback" and (state.get("human_feedback") or state.get("edited_content")):
+        # Revision Mode - use edited content if provided, otherwise use generated section
+        previous_draft = state.get("edited_content") or (state['generated_sections'][idx] if idx < len(state['generated_sections']) else "")
+        feedback_text = state.get("human_feedback", "")
+        
+        if feedback_text:
+            prompt = f"""
         You are revising the section "{current_topic}".
         
-        FEEDBACK: {state['human_feedback']}
+        FEEDBACK: {feedback_text}
         
-        Previous draft:
-        {state['generated_sections'][idx] if idx < len(state['generated_sections']) else ""}
+        Previous draft (which may have been edited by the user):
+        {previous_draft}
         
-        Rewrite this section incorporating the feedback.
+        Please rewrite this section incorporating ALL the feedback provided. Pay special attention to any sentence-specific feedback mentioned in the feedback section.
+        Make sure the revised version addresses all concerns raised in the feedback while maintaining the user's edits where appropriate.
+        """
+        else:
+            # Only edited content, no feedback - use edited content as base
+            prompt = f"""
+        You are working on the section "{current_topic}".
+        
+        The user has edited this content:
+        {previous_draft}
+        
+        Please refine and improve this section while maintaining the user's edits and intent.
         """
     else:
         # Generation Mode
@@ -140,7 +156,16 @@ def review_router(state: CustomWorkflowState) -> str:
     
     if status == "approved":
         # Check if there are more sections
-        if state["current_section_index"] < len(state["plan"]) - 1:
+        # Also check if plan was extended (new sections added)
+        current_idx = state["current_section_index"]
+        plan_len = len(state["plan"])
+        sections_len = len(state.get("generated_sections", []))
+        
+        # If we've generated fewer sections than the plan length, continue
+        if current_idx < plan_len - 1:
+            return "next_section"
+        elif sections_len < plan_len:
+            # Plan was extended, generate the new sections
             return "next_section"
         else:
             return "finalize"

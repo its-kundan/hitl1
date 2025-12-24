@@ -87,18 +87,59 @@ async def stream_custom_workflow(request: Request, thread_id: str):
         elif run_data["type"] == "resume":
             event_type = "resume"
             
-            # 1. Apply Edits if any
-            if run_data.get("edited_content"):
-                current_state = custom_graph.get_state(config)
-                if current_state.values:
-                    sections = list(current_state.values.get("generated_sections", []))
-                    idx = current_state.values.get("current_section_index", 0)
+            current_state = custom_graph.get_state(config)
+            if current_state.values:
+                # 1. Update plan if provided
+                if run_data.get("updated_plan"):
+                    custom_graph.update_state(config, {"plan": run_data["updated_plan"]})
+                    # Adjust current_section_index if plan was shortened
+                    current_idx = current_state.values.get("current_section_index", 0)
+                    new_plan_len = len(run_data["updated_plan"])
+                    if current_idx >= new_plan_len:
+                        custom_graph.update_state(config, {"current_section_index": max(0, new_plan_len - 1)})
+                
+                # 2. Apply Edits if any (store in state for use in generation)
+                if run_data.get("edited_content"):
+                    # Store edited content in state so generate_section_node can use it
+                    custom_graph.update_state(config, {"edited_content": run_data["edited_content"]})
+                
+                # 3. Handle sentence-level feedback (now supports multiple feedbacks)
+                if run_data.get("sentence_feedback"):
+                    sentence_feedbacks = run_data["sentence_feedback"]
+                    general_feedback = run_data.get("human_comment", "")
                     
-                    if idx < len(sections):
-                        sections[idx] = run_data["edited_content"]
-                        custom_graph.update_state(config, {"generated_sections": sections})
+                    # Check if feedbacks are already combined in frontend
+                    if isinstance(sentence_feedbacks, list) and len(sentence_feedbacks) > 0:
+                        # Check if already combined
+                        if "Multiple Sentence Feedbacks" in general_feedback or "Sentence Feedbacks" in general_feedback:
+                            # Already combined in frontend, use as is
+                            pass
+                        else:
+                            # Combine all sentence feedbacks with general feedback
+                            sentence_feedbacks_text = "\n\n".join([
+                                f"Feedback {idx + 1}: Please improve this specific sentence: \"{fb.get('text', '')}\"\nFeedback: {fb.get('feedback', '')}"
+                                for idx, fb in enumerate(sentence_feedbacks)
+                            ])
+                            
+                            combined_feedback = f"IMPORTANT - Multiple Sentence Feedbacks:\n{sentence_feedbacks_text}\n\nMake sure to incorporate ALL of these feedbacks into the revised version."
+                            
+                            if general_feedback:
+                                run_data["human_comment"] = f"{general_feedback}\n\n{combined_feedback}"
+                            else:
+                                run_data["human_comment"] = combined_feedback
+                    elif isinstance(sentence_feedbacks, dict):
+                        # Legacy single feedback format
+                        sentence_text = sentence_feedbacks.get('text', '')
+                        sentence_fb = sentence_feedbacks.get('feedback', '')
+                        if sentence_text and sentence_fb:
+                            if "Sentence feedback" not in general_feedback:
+                                combined_feedback = f"IMPORTANT: Please improve this specific sentence: \"{sentence_text}\"\nFeedback: {sentence_fb}\nMake sure to incorporate this feedback into the revised version."
+                                if general_feedback:
+                                    run_data["human_comment"] = f"{general_feedback}\n\n{combined_feedback}"
+                                else:
+                                    run_data["human_comment"] = combined_feedback
             
-            # 2. Update Feedback/Approval
+            # 4. Update Feedback/Approval
             state_update = {
                 "approval_status": run_data["review_action"],
                 "human_feedback": run_data.get("human_comment")

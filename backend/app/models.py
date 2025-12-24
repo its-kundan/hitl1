@@ -9,6 +9,8 @@ class ResumeRequest(BaseModel):
     review_action: str  # "approved" or "feedback"
     human_comment: Optional[str] = None
     edited_content: Optional[str] = None  # New: Allow user to directly edit the chunk
+    updated_plan: Optional[List[str]] = None  # New: Allow user to update the plan
+    sentence_feedback: Optional[List[dict]] = None  # New: Array of sentence-specific feedbacks with text and feedback
 
 class ApproveRequest(BaseModel):
     thread_id: str
