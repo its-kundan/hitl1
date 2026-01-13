@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import AssistantService from "./AssistantService";
 import ReactMarkdown from "react-markdown";
+import SentenceFeedback from "./SentenceFeedback";
 import "./App.css";
 
 const BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
@@ -24,6 +25,7 @@ const DataAnalysisDemo = () => {
   const [feedback, setFeedback] = useState("");
   const [interruptMessage, setInterruptMessage] = useState("");
   const [threadId, setThreadId] = useState(null);
+  const [sentenceFeedbacks, setSentenceFeedbacks] = useState([]);
   const [revisionCount, setRevisionCount] = useState(0);
   const [history, setHistory] = useState([]);
   const [isRunningCode, setIsRunningCode] = useState(false);
@@ -277,7 +279,24 @@ const DataAnalysisDemo = () => {
   };
 
   const handleFeedback = async () => {
-    if (!feedback.trim()) return;
+    // Combine general feedback with sentence feedbacks
+    let combinedFeedback = feedback.trim();
+    
+    if (sentenceFeedbacks.length > 0) {
+      const sentenceFeedbacksText = sentenceFeedbacks.map((fb, idx) => 
+        `Feedback ${idx + 1}: Please improve this specific sentence: "${fb.text}"\nFeedback: ${fb.feedback}`
+      ).join('\n\n');
+      
+      const sentenceFb = `IMPORTANT - Multiple Sentence Feedbacks:\n${sentenceFeedbacksText}\n\nMake sure to incorporate ALL of these feedbacks into the revised version.`;
+      
+      if (combinedFeedback) {
+        combinedFeedback = `${combinedFeedback}\n\n${sentenceFb}`;
+      } else {
+        combinedFeedback = sentenceFb;
+      }
+    }
+    
+    if (!combinedFeedback.trim()) return;
     
     const newRevisionCount = revisionCount + 1;
     setRevisionCount(newRevisionCount);
@@ -287,14 +306,14 @@ const DataAnalysisDemo = () => {
     codeRef.current = "";
     
     setHistory(prev => [...prev, 
-      { role: "user", content: `Feedback (Revision ${newRevisionCount}): ${feedback}` }
+      { role: "user", content: `Feedback (Revision ${newRevisionCount}): ${combinedFeedback}` }
     ]);
     
     try {
       await AssistantService.resumeDataAnalysis({
         thread_id: threadId,
         review_action: "feedback",
-        human_comment: feedback
+        human_comment: combinedFeedback
       });
       
       eventSourceRef.current = AssistantService.streamDataAnalysis(
@@ -321,6 +340,8 @@ const DataAnalysisDemo = () => {
       );
       
       setFeedback("");
+      // Clear sentence feedbacks after submission
+      setSentenceFeedbacks([]);
     } catch (err) {
       alert("Failed to submit feedback: " + err.message);
     }
@@ -351,6 +372,7 @@ const DataAnalysisDemo = () => {
     setHistory([]);
     setManualExecutionResults("");
     setIsRunningCode(false);
+    setSentenceFeedbacks([]);
   };
 
   const getStageLabel = (stage) => {
@@ -516,14 +538,18 @@ const DataAnalysisDemo = () => {
           {dataSummary && (
             <div className="stage-content research-stage">
               <div className="stage-header">🔍 Data Exploration</div>
-              <ReactMarkdown>{dataSummary}</ReactMarkdown>
+              <div className="selectable-content">
+                <ReactMarkdown>{dataSummary}</ReactMarkdown>
+              </div>
             </div>
           )}
 
           {analysisPlan && (
             <div className="stage-content draft-stage">
               <div className="stage-header">📋 Analysis Plan</div>
-              <ReactMarkdown>{analysisPlan}</ReactMarkdown>
+              <div className="selectable-content">
+                <ReactMarkdown>{analysisPlan}</ReactMarkdown>
+              </div>
             </div>
           )}
 
@@ -735,12 +761,66 @@ const DataAnalysisDemo = () => {
           {finalReport && uiState === "finished" && (
             <div className="stage-content finalize-stage">
               <div className="stage-header">✨ Final Report</div>
-              <ReactMarkdown>{finalReport}</ReactMarkdown>
+              <div className="selectable-content">
+                <ReactMarkdown>{finalReport}</ReactMarkdown>
+              </div>
             </div>
           )}
           
           <div ref={messagesEndRef} />
         </div>
+
+        {/* Sentence Feedback Component */}
+        <SentenceFeedback
+          enabled={uiState !== "idle" && uiState !== "finished"}
+          targetSelector=".selectable-content"
+          onFeedbackSubmit={(selectedText, feedback) => {
+            // Add to sentence feedbacks array
+            const newFeedback = {
+              text: selectedText,
+              feedback: feedback,
+              timestamp: new Date().toISOString()
+            };
+            setSentenceFeedbacks([...sentenceFeedbacks, newFeedback]);
+            
+            // Optionally add to general feedback or handle separately
+            console.log('Sentence feedback received:', newFeedback);
+          }}
+          placeholder="E.g., Make this more concise, add more detail, clarify this point..."
+        />
+
+        {/* Display collected sentence feedbacks */}
+        {sentenceFeedbacks.length > 0 && (
+          <div className="sentence-feedbacks-summary" style={{
+            margin: '1rem',
+            padding: '1rem',
+            background: 'var(--bg-secondary)',
+            borderRadius: '8px',
+            border: '1px solid var(--border-color)'
+          }}>
+            <div style={{ 
+              fontSize: '0.9rem', 
+              fontWeight: 600, 
+              color: '#92400e',
+              marginBottom: '0.75rem'
+            }}>
+              Collected Sentence Feedbacks ({sentenceFeedbacks.length}):
+            </div>
+            {sentenceFeedbacks.map((fb, idx) => (
+              <div key={idx} style={{
+                background: '#fef3c7',
+                border: '1px solid #fbbf24',
+                borderRadius: '8px',
+                padding: '0.75rem',
+                marginBottom: '0.5rem',
+                fontSize: '0.85rem',
+                color: '#78350f'
+              }}>
+                <strong>"{fb.text.substring(0, 50)}{fb.text.length > 50 ? '...' : ''}"</strong>: {fb.feedback}
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="input-area">
           {uiState === "idle" && (
