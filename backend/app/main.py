@@ -11,6 +11,7 @@ from app.lesson_02_streaming import router as lesson_02_router
 from app.lesson_03_async_mcp import router as lesson_03_router
 from app.lesson_04_custom import router as lesson_04_router
 from app.lesson_05_data_analysis import router as lesson_05_router
+from app.data_analytics2_router import router as data_analytics2_router
 from app.cors_config import add_cors_middleware
 
 app = FastAPI()
@@ -29,3 +30,4 @@ app.include_router(lesson_02_router)
 app.include_router(lesson_03_router)
 app.include_router(lesson_04_router)
 app.include_router(lesson_05_router)
+app.include_router(data_analytics2_router)

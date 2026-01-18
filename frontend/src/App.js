@@ -3,6 +3,7 @@ import AssistantService from "./AssistantService";
 import ReactMarkdown from "react-markdown";
 import HitlWorkflow from "./HitlWorkflow";
 import DataAnalysisDemo from "./DataAnalysisDemo";
+import DataAnalytics2 from "./DataAnalytics2";
 import "./App.css";
 
 // Flag to toggle between blocking API and streaming API
@@ -802,6 +803,12 @@ const App = () => {
             >
               Data Analysis (CSV)
             </button>
+            <button
+              onClick={() => setWorkflowMode("data-analytics2")}
+              className={workflowMode === "data-analytics2" ? "active" : ""}
+            >
+              Data Analytics 2
+            </button>
           </div>
 
           <div className="navbar-right">
@@ -830,6 +837,7 @@ const App = () => {
 
       {workflowMode === "custom" ? <HitlWorkflow /> :
         workflowMode === "data-analysis" ? <DataAnalysisDemo /> :
+        workflowMode === "data-analytics2" ? <DataAnalytics2 /> :
           <BasicApp />}
     </div>
   );
