@@ -14,7 +14,7 @@ import shutil
 from pathlib import Path
 
 # Import the existing data_analysis_workflow as a fallback
-from data_analysis_workflow import data_analysis_graph, DataAnalysisWorkflowState
+from app.data_analysis_workflow import data_analysis_graph, DataAnalysisWorkflowState
 
 router = APIRouter(prefix="/data-analytics2", tags=["Data Analytics 2"])
 
