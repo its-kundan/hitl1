@@ -1,15 +1,40 @@
-# Lesson 4: Custom Gen AI Workflow with HITL
-# Advanced workflow demonstrating Iterative Chunk-Based Generation
-# Uses Server-Sent Events (SSE) for real-time streaming
+# Lesson 4: Custom Gen AI Workflow with HITL (Iterative Content Generator)
+# Uses only OPENAI_API_KEY - no GROQ, Gemini, or other keys required.
 
 from fastapi import APIRouter, Request, HTTPException
 from uuid import uuid4
+import os
+import asyncio
 from app.models import StartRequest, GraphResponse, ResumeRequest
 from app.custom_workflow import custom_graph
 from sse_starlette.sse import EventSourceResponse
 import json
 
 router = APIRouter()
+
+
+def _run_custom_workflow_to_interrupt(input_state, config: dict) -> "tuple[dict, bool]":
+    """Run workflow synchronously until interrupt or end. Returns (state_values, interrupted_at_review).
+    input_state: dict for start (e.g. {"user_query": "..."}), None for resume.
+    """
+    try:
+        custom_graph.invoke(input_state, config)
+        state = custom_graph.get_state(config)
+        values = state.values or {}
+        interrupted = bool(state.next and "human_review" in state.next)
+        return values, interrupted
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"_error": str(e)}, False
+
+
+def _ensure_openai_key():
+    if not os.getenv("OPENAI_API_KEY"):
+        raise HTTPException(
+            status_code=500,
+            detail="OPENAI_API_KEY is required. Add it to backend/.env (e.g. OPENAI_API_KEY=sk-...)."
+        )
 
 # In-memory storage for run configurations
 # In a real app, this would be in a database
@@ -18,7 +43,8 @@ run_configs = {}
 
 @router.post("/custom/start", response_model=GraphResponse)
 def create_custom_workflow(request: StartRequest):
-    """Start a new custom workflow run."""
+    """Start a new custom workflow run. Requires only OPENAI_API_KEY."""
+    _ensure_openai_key()
     thread_id = str(uuid4())
     
     run_configs[thread_id] = {
@@ -70,7 +96,9 @@ async def stream_custom_workflow(request: Request, thread_id: str):
     """
     Stream the custom workflow execution.
     Handles 'start' logic and 'resume' logic (applying edits/feedback).
+    Requires only OPENAI_API_KEY.
     """
+    _ensure_openai_key()
     config = {"configurable": {"thread_id": thread_id}}
     
     # Determine mode
@@ -156,36 +184,25 @@ async def stream_custom_workflow(request: Request, thread_id: str):
         # Initial handshake
         initial_data = json.dumps({"thread_id": thread_id})
         yield {"event": event_type, "data": initial_data}
-        
-        try:
-            # Stream from graph
-            async for msg, metadata in custom_graph.astream(input_state, config, stream_mode="messages"):
-                if await request.is_disconnected():
-                    break
-                
-                node_name = metadata.get('langgraph_node', '')
-                
-                if node_name == "generate_section":
-                    # Stream tokens for the content
-                    token_data = json.dumps({
-                        "content": msg.content,
-                        "node": node_name
-                    })
-                    yield {"event": "token", "data": token_data}
-                    
-                # We can also detect "plan" node completion if we want to stream the plan immediately,
-                # but it's easier to send full state at interruption/end.
 
-            # Check state after stream ends (interrupted or finished)
-            state = custom_graph.get_state(config)
-            values = state.values
-            
-            if state.next and 'human_review' in state.next:
-                # Interrupted for Review
+        try:
+            # Run workflow in thread so sync LLM calls don't block the event loop.
+            # This ensures we yield status to the client when the graph pauses at human_review or finishes.
+            # For start: input_state = {"user_query": "..."}. For resume: input_state = None (continue from checkpoint).
+            loop = asyncio.get_event_loop()
+            values, interrupted_at_review = await loop.run_in_executor(
+                None,
+                lambda: _run_custom_workflow_to_interrupt(input_state, config),
+            )
+
+            if values.get("_error"):
+                yield {"event": "error", "data": json.dumps({"error": values["_error"]})}
+                return
+
+            if interrupted_at_review:
                 idx = values.get("current_section_index", 0)
                 sections = values.get("generated_sections", [])
                 current_chunk = sections[idx] if idx < len(sections) else ""
-                
                 status_data = json.dumps({
                     "status": "user_feedback",
                     "plan": values.get("plan", []),
@@ -194,9 +211,7 @@ async def stream_custom_workflow(request: Request, thread_id: str):
                     "current_chunk": current_chunk
                 })
                 yield {"event": "status", "data": status_data}
-                
             else:
-                # Finished
                 status_data = json.dumps({
                     "status": "finished",
                     "final_output": values.get("final_output", ""),

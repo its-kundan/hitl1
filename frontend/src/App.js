@@ -745,8 +745,8 @@ This project is a demonstration of HITL workflows using LangGraph and FastAPI.`}
 // Main App component with workflow mode selection
 const App = () => {
   const [workflowMode, setWorkflowMode] = useState(() => {
-    // Try to get from localStorage, default to "basic"
-    return localStorage.getItem("workflowMode") || "basic";
+    // Default to Iterative HITL Generation (custom) - only requires OPENAI_API_KEY
+    return localStorage.getItem("workflowMode") || "custom";
   });
   const [theme, setTheme] = useState(() => localStorage.getItem("theme") || "light");
   const [showDocumentation, setShowDocumentation] = useState(false);

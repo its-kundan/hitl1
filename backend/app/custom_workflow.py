@@ -10,7 +10,7 @@ import json
 # Load environment variables
 load_dotenv()
 
-# --- Model Definition ---
+# --- Model Definition (OpenAI only - no other API keys required) ---
 model = ChatOpenAI(model="gpt-4o-mini", api_key=os.getenv("OPENAI_API_KEY"))
 
 

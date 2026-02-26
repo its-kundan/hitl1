@@ -7,6 +7,7 @@ typing_extensions
 langchain_openai
 langchain_core
 langchain_community
+langchain_groq
 python-dotenv
 sse-starlette
 pyppeteer
@@ -16,3 +17,7 @@ numpy
 matplotlib
 seaborn
 python-multipart
+google-genai
+beautifulsoup4
+pillow
+plotly

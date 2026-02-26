@@ -128,6 +128,7 @@ class SpecializedAnalytics:
     @staticmethod
     def customer_segmentation(df: pd.DataFrame, customer_col: str, features: List[str]) -> Dict[str, Any]:
         """RFM analysis and customer segmentation"""
+        print(df, customer_col, features)
         try:
             from sklearn.cluster import KMeans
             from sklearn.preprocessing import StandardScaler
@@ -190,7 +191,7 @@ class SpecializedAnalytics:
             for col in numeric_columns:
                 connections = sum(1 for corr in strong_correlations if corr['source'] == col or corr['target'] == col)
                 avg_correlation = np.mean([abs(corr['correlation']) for corr in strong_correlations 
-                                        if corr['source'] == col or corr['target'] == col]) if strong_correlations else 0
+                                        if corr['source'] == col or corr['target'] == col])
                 node_metrics[col] = {
                     'connections': connections,
                     'avg_correlation': float(avg_correlation) if not np.isnan(avg_correlation) else 0
