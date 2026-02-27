@@ -5,6 +5,7 @@ langgraph
 pydantic
 typing_extensions
 langchain_openai
+langchain-groq
 langchain_core
 langchain_community
 python-dotenv

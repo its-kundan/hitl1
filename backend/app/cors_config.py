@@ -6,7 +6,7 @@ def add_cors_middleware(app):
     # Get allowed origins from environment variable or use defaults
     allowed_origins_str = os.getenv(
         "ALLOWED_ORIGINS",
-        "http://localhost:3000,http://localhost:3001"
+        "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003,http://127.0.0.1:3000,http://127.0.0.1:3001,http://127.0.0.1:3002,http://127.0.0.1:3003"
     )
     # Split by comma and strip whitespace
     allowed_origins = [origin.strip() for origin in allowed_origins_str.split(",")]

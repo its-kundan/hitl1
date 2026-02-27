@@ -6,6 +6,7 @@ const HitlWorkflow = () => {
     const [query, setQuery] = useState('');
     const [threadId, setThreadId] = useState(null);
     const [status, setStatus] = useState('idle'); // idle, running, review, finished, error
+    const [errorMessage, setErrorMessage] = useState('');
 
     // State for the iterative flow
     const [plan, setPlan] = useState([]);
@@ -39,10 +40,12 @@ const HitlWorkflow = () => {
     const [editingPlanValue, setEditingPlanValue] = useState('');
 
     const eventSourceRef = useRef(null);
+    const runningTimeoutRef = useRef(null);
 
     const startWorkflow = async () => {
         try {
             setStatus('running');
+            setErrorMessage('');
             setPlan([]);
             setCompletedSections([]);
             setCurrentChunkContent('');
@@ -56,12 +59,38 @@ const HitlWorkflow = () => {
                 body: JSON.stringify({ human_request: query }),
             });
 
+            if (!response.ok) {
+                const errText = await response.text();
+                let msg = `Start failed (${response.status}).`;
+                try {
+                    const errJson = JSON.parse(errText);
+                    if (errJson.detail) msg = typeof errJson.detail === 'string' ? errJson.detail : JSON.stringify(errJson.detail);
+                } catch {
+                    if (errText) msg = errText.slice(0, 200);
+                }
+                throw new Error(msg);
+            }
             const data = await response.json();
+            if (!data?.thread_id) {
+                throw new Error('Server did not return a session. Please try again.');
+            }
             setThreadId(data.thread_id);
+            // Timeout: if still "Generating" after 90s with no progress, show error
+            if (runningTimeoutRef.current) clearTimeout(runningTimeoutRef.current);
+            runningTimeoutRef.current = setTimeout(() => {
+                setStatus((s) => {
+                    if (s === 'running') {
+                        setErrorMessage('Request timed out. Check your API key in backend/.env (OPENAI or GROQ) and try again.');
+                        return 'error';
+                    }
+                    return s;
+                });
+            }, 90000);
             connectToStream(data.thread_id);
 
         } catch (error) {
             console.error('Error starting workflow:', error);
+            setErrorMessage(error?.message || 'Failed to start workflow. Is the backend running at http://localhost:8000?');
             setStatus('error');
         }
     };
@@ -160,6 +189,7 @@ const HitlWorkflow = () => {
 
         } catch (error) {
             console.error('Error submitting review:', error);
+            setErrorMessage(error?.message || 'Failed to submit review.');
             setStatus('error');
         }
     };
@@ -185,10 +215,25 @@ const HitlWorkflow = () => {
             setCurrentChunkContent(incomingContent);
         });
 
+        eventSource.addEventListener('server_error', (event) => {
+            if (runningTimeoutRef.current) { clearTimeout(runningTimeoutRef.current); runningTimeoutRef.current = null; }
+            eventSource.close();
+            setStatus('error');
+            if (event.data) {
+                try {
+                    const data = JSON.parse(event.data);
+                    setErrorMessage(data.error || 'Backend error.');
+                } catch {
+                    setErrorMessage('Something went wrong. Check backend logs.');
+                }
+            }
+        });
+
         eventSource.addEventListener('status', (event) => {
             const data = JSON.parse(event.data);
 
             if (data.status === 'user_feedback') {
+                if (runningTimeoutRef.current) { clearTimeout(runningTimeoutRef.current); runningTimeoutRef.current = null; }
                 setStatus('review');
                 const newPlan = data.plan || [];
                 const newIndex = data.current_index || 0;
@@ -232,6 +277,7 @@ const HitlWorkflow = () => {
                 
                 eventSource.close();
             } else if (data.status === 'finished') {
+                if (runningTimeoutRef.current) { clearTimeout(runningTimeoutRef.current); runningTimeoutRef.current = null; }
                 setStatus('finished');
                 // Use modified versions if available, otherwise use generated sections
                 const finalSections = data.generated_sections || [];
@@ -250,9 +296,19 @@ const HitlWorkflow = () => {
         });
 
         eventSource.addEventListener('error', (event) => {
+            if (runningTimeoutRef.current) { clearTimeout(runningTimeoutRef.current); runningTimeoutRef.current = null; }
             eventSource.close();
-            // Only set error if we weren't expecting a close (e.g. network error)
-            // But usually 'status' event handles the close logic.
+            setStatus('error');
+            if (event.data) {
+                try {
+                    const data = JSON.parse(event.data);
+                    setErrorMessage(data.error || 'Stream error.');
+                } catch {
+                    setErrorMessage('Connection or stream error. Is the backend running?');
+                }
+            } else {
+                setErrorMessage('Connection lost or server error. Check that the backend is running at http://localhost:8000.');
+            }
         });
     };
 
@@ -446,16 +502,21 @@ const HitlWorkflow = () => {
                         onChange={(e) => setQuery(e.target.value)}
                         placeholder="What would you like to write about?"
                         className="chat-input"
-                        disabled={status !== 'idle' && status !== 'finished'}
+                        disabled={status !== 'idle' && status !== 'finished' && status !== 'error'}
                     />
                     <button
                         onClick={startWorkflow}
-                        disabled={!query || (status !== 'idle' && status !== 'finished')}
+                        disabled={!query || (status !== 'idle' && status !== 'finished' && status !== 'error')}
                         className="btn-primary"
                     >
-                        {status === 'running' ? 'Generating...' : 'Start New'}
+                        {status === 'running' ? 'Generating...' : status === 'error' ? 'Try Again' : 'Start New'}
                     </button>
                 </div>
+                {status === 'error' && errorMessage && (
+                    <div className="hitl-error-message" role="alert">
+                        {errorMessage}
+                    </div>
+                )}
             </div>
 
             {/* Main Workflow Area */}

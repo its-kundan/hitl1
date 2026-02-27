@@ -148,14 +148,29 @@ async def stream_custom_workflow(request: Request, thread_id: str):
             # input_state remains None for resume
             
     else:
-        # If no config in memory, assume it's a resume or reconnect
-        # But for 'start', we need the query. We'll assume resume.
-        pass
+        # No config in memory (e.g. different worker, or stream hit before start)
+        try:
+            existing = custom_graph.get_state(config)
+            if not existing.values:
+                input_state = None  # Will yield error in generator
+        except Exception:
+            input_state = None
 
     async def event_generator():
         # Initial handshake
         initial_data = json.dumps({"thread_id": thread_id})
         yield {"event": event_type, "data": initial_data}
+        
+        # Cannot start without input (new thread with no run_data)
+        if input_state is None and event_type == "resume":
+            try:
+                state = custom_graph.get_state(config)
+                if not state.values:
+                    yield {"event": "server_error", "data": json.dumps({"error": "Session expired or invalid. Please start a new workflow."})}
+                    return
+            except Exception:
+                yield {"event": "server_error", "data": json.dumps({"error": "Session expired or invalid. Please start a new workflow."})}
+                return
         
         try:
             # Stream from graph
@@ -208,6 +223,12 @@ async def stream_custom_workflow(request: Request, thread_id: str):
         except Exception as e:
             import traceback
             traceback.print_exc()
-            yield {"event": "error", "data": json.dumps({"error": str(e)})}
+            err_msg = str(e)
+            # Extract user-friendly message for API quota/auth errors
+            if "429" in err_msg or "quota" in err_msg.lower() or "insufficient_quota" in err_msg:
+                err_msg = "API quota exceeded or invalid key. Check OPENAI_API_KEY or GROQ_API_KEY in backend/.env and your provider's billing."
+            elif "401" in err_msg or "invalid" in err_msg.lower() and "api" in err_msg.lower():
+                err_msg = "Invalid API key. Check OPENAI_API_KEY or GROQ_API_KEY in backend/.env"
+            yield {"event": "server_error", "data": json.dumps({"error": err_msg})}
 
     return EventSourceResponse(event_generator())

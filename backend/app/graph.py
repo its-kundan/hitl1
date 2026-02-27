@@ -1,6 +1,6 @@
 from typing import Literal, Optional
 from langgraph.graph import StateGraph, MessagesState, START, END
-from langchain_openai import ChatOpenAI
+from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.checkpoint.memory import MemorySaver
 from dotenv import load_dotenv
@@ -9,9 +9,12 @@ import os
 # Load environment variables before initializing the model
 load_dotenv()
 
-# --- Model Definition ---
-# OpenAI API key configured in .env file
-model = ChatOpenAI(model="gpt-4o-mini", api_key=os.getenv("OPENAI_API_KEY"))
+# --- Model Definition (Groq - avoids OpenAI quota) ---
+model = ChatGroq(
+    model="llama-3.1-70b-versatile",
+    api_key=os.getenv("GROQ_API_KEY") or os.getenv("groq_api_key"),
+    temperature=0.3,
+)
 
 
 # --- Graph State Definition ---

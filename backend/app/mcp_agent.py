@@ -3,12 +3,16 @@ import os
 from pathlib import Path
 from typing import Callable, Optional
 
+from dotenv import load_dotenv
 from langgraph.types import interrupt
 from langchain_core.tools import BaseTool, tool
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.prebuilt import create_react_agent
 from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain_groq import ChatGroq
+
+load_dotenv()
 
 
 def load_mcp_servers(config_path):
@@ -100,8 +104,13 @@ async def get_agent():
     
     tools_with_hitl = await get_mcp_tools_with_hitl()
     
+    llm = ChatGroq(
+        model="llama-3.1-70b-versatile",
+        api_key=os.getenv("GROQ_API_KEY") or os.getenv("groq_api_key"),
+        temperature=0.3,
+    )
     agent = create_react_agent(
-        model="openai:gpt-4o-mini",
+        llm,
         prompt="You are a GitHub Assistant that helps users manage their GitHub repositories and workflows.",
         tools=tools_with_hitl,
         checkpointer=_cached_checkpointer,  # Shared across all agents
