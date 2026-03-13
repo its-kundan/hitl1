@@ -25,6 +25,16 @@
   gap: 1rem;
 }
 
+.hitl-error-message {
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  background: rgba(220, 53, 69, 0.12);
+  border: 1px solid rgba(220, 53, 69, 0.4);
+  border-radius: var(--radius-md, 8px);
+  color: #dc3545;
+  font-size: 0.9rem;
+}
+
 .hitl-main-area {
   display: flex;
   gap: 1.5rem;
@@ -615,6 +625,10 @@
   padding: 1rem;
 }
 
+.comparison-panel-full {
+  grid-column: 1 / -1;
+}
+
 .comparison-panel h4 {
   font-size: 0.9rem;
   font-weight: 600;
@@ -671,4 +685,40 @@
     left: 10px;
     transform: none;
   }
+}
+
+.diff-view {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.85rem;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+}
+
+.diff-line {
+  display: flex;
+  align-items: flex-start;
+  white-space: pre-wrap;
+}
+
+.diff-line-prefix {
+  width: 1.5rem;
+  flex-shrink: 0;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.diff-line-text {
+  flex: 1;
+  padding: 0.1rem 0.75rem 0.1rem 0;
+}
+
+.diff-added {
+  background-color: #e6ffed; /* GitHub-style green */
+  color: #1b4332;
+}
+
+.diff-removed {
+  background-color: #ffeef0; /* GitHub-style red */
+  color: #7f1d1d;
 }

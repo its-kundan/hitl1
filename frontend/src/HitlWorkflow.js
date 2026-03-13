@@ -3,9 +3,11 @@ import ReactMarkdown from 'react-markdown';
 import './HitlWorkflow.css';
 
 const HitlWorkflow = () => {
+    const BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
     const [query, setQuery] = useState('');
     const [threadId, setThreadId] = useState(null);
     const [status, setStatus] = useState('idle'); // idle, running, review, finished, error
+    const [errorMessage, setErrorMessage] = useState('');
 
     // State for the iterative flow
     const [plan, setPlan] = useState([]);
@@ -39,10 +41,12 @@ const HitlWorkflow = () => {
     const [editingPlanValue, setEditingPlanValue] = useState('');
 
     const eventSourceRef = useRef(null);
+    const runningTimeoutRef = useRef(null);
 
     const startWorkflow = async () => {
         try {
             setStatus('running');
+            setErrorMessage('');
             setPlan([]);
             setCompletedSections([]);
             setCurrentChunkContent('');
@@ -50,7 +54,7 @@ const HitlWorkflow = () => {
             setFirstGeneratedVersions([]);
             setModifiedVersions([]);
 
-            const response = await fetch('http://localhost:8000/custom/start', {
+            const response = await fetch(`${BASE_URL}/custom/start`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ human_request: query }),
@@ -58,10 +62,21 @@ const HitlWorkflow = () => {
 
             const data = await response.json();
             setThreadId(data.thread_id);
+            if (runningTimeoutRef.current) clearTimeout(runningTimeoutRef.current);
+            runningTimeoutRef.current = setTimeout(() => {
+                setStatus((s) => {
+                    if (s === 'running') {
+                        setErrorMessage('Request timed out. Is Ollama running? Run: ollama serve  and  ollama pull gemma3:1b');
+                        return 'error';
+                    }
+                    return s;
+                });
+            }, 90000);
             connectToStream(data.thread_id);
 
         } catch (error) {
             console.error('Error starting workflow:', error);
+            setErrorMessage(error?.message || `Failed to start. Is the backend running at ${BASE_URL}?`);
             setStatus('error');
         }
     };
@@ -136,7 +151,7 @@ const HitlWorkflow = () => {
                 setModifiedVersions(modifiedVersionsList);
             }
 
-            await fetch('http://localhost:8000/custom/resume', {
+            await fetch(`${BASE_URL}/custom/resume`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
@@ -160,6 +175,7 @@ const HitlWorkflow = () => {
 
         } catch (error) {
             console.error('Error submitting review:', error);
+            setErrorMessage(error?.message || 'Failed to submit review.');
             setStatus('error');
         }
     };
@@ -169,7 +185,7 @@ const HitlWorkflow = () => {
             eventSourceRef.current.close();
         }
 
-        const url = `http://localhost:8000/custom/stream/${tid}`;
+        const url = `${BASE_URL}/custom/stream/${tid}`;
         const eventSource = new EventSource(url);
         eventSourceRef.current = eventSource;
 
@@ -185,10 +201,25 @@ const HitlWorkflow = () => {
             setCurrentChunkContent(incomingContent);
         });
 
+        eventSource.addEventListener('server_error', (event) => {
+            if (runningTimeoutRef.current) { clearTimeout(runningTimeoutRef.current); runningTimeoutRef.current = null; }
+            eventSource.close();
+            setStatus('error');
+            if (event.data) {
+                try {
+                    const data = JSON.parse(event.data);
+                    setErrorMessage(data.error || 'Backend error.');
+                } catch {
+                    setErrorMessage('Something went wrong. Check backend logs.');
+                }
+            }
+        });
+
         eventSource.addEventListener('status', (event) => {
             const data = JSON.parse(event.data);
 
             if (data.status === 'user_feedback') {
+                if (runningTimeoutRef.current) { clearTimeout(runningTimeoutRef.current); runningTimeoutRef.current = null; }
                 setStatus('review');
                 const newPlan = data.plan || [];
                 const newIndex = data.current_index || 0;
@@ -232,6 +263,7 @@ const HitlWorkflow = () => {
                 
                 eventSource.close();
             } else if (data.status === 'finished') {
+                if (runningTimeoutRef.current) { clearTimeout(runningTimeoutRef.current); runningTimeoutRef.current = null; }
                 setStatus('finished');
                 // Use modified versions if available, otherwise use generated sections
                 const finalSections = data.generated_sections || [];
@@ -250,9 +282,19 @@ const HitlWorkflow = () => {
         });
 
         eventSource.addEventListener('error', (event) => {
+            if (runningTimeoutRef.current) { clearTimeout(runningTimeoutRef.current); runningTimeoutRef.current = null; }
             eventSource.close();
-            // Only set error if we weren't expecting a close (e.g. network error)
-            // But usually 'status' event handles the close logic.
+            setStatus('error');
+            if (event.data) {
+                try {
+                    const data = JSON.parse(event.data);
+                    setErrorMessage(data.error || 'Stream error.');
+                } catch {
+                    setErrorMessage('Connection lost or server error. Is the backend running? Is Ollama running (ollama serve)?');
+                }
+            } else {
+                setErrorMessage(`Connection lost or server error. Check backend at ${BASE_URL} and run: ollama serve`);
+            }
         });
     };
 
@@ -433,6 +475,53 @@ const HitlWorkflow = () => {
         };
     }, []);
 
+    const renderLineDiff = (original, modified) => {
+        const oldLines = (original || '').split('\n');
+        const newLines = (modified || '').split('\n');
+        const maxLen = Math.max(oldLines.length, newLines.length);
+        const diffs = [];
+        
+        for (let i = 0; i < maxLen; i++) {
+            const o = i < oldLines.length ? oldLines[i] : null;
+            const n = i < newLines.length ? newLines[i] : null;
+            
+            if (o === n) {
+                if (o !== null && o !== '') {
+                    diffs.push({ type: 'equal', text: o });
+                }
+            } else {
+                if (o !== null) {
+                    diffs.push({ type: 'removed', text: o });
+                }
+                if (n !== null) {
+                    diffs.push({ type: 'added', text: n });
+                }
+            }
+        }
+        
+        return (
+            <div className="diff-view">
+                {diffs.map((part, idx) => (
+                    <div
+                        key={idx}
+                        className={
+                            part.type === 'added'
+                                ? 'diff-line diff-added'
+                                : part.type === 'removed'
+                                ? 'diff-line diff-removed'
+                                : 'diff-line'
+                        }
+                    >
+                        <span className="diff-line-prefix">
+                            {part.type === 'added' ? '+' : part.type === 'removed' ? '-' : ' '}
+                        </span>
+                        <span className="diff-line-text">{part.text}</span>
+                    </div>
+                ))}
+            </div>
+        );
+    };
+
     return (
         <div className="hitl-container">
             <h1 className="hitl-header">Iterative Content Generator (HITL)</h1>
@@ -446,16 +535,21 @@ const HitlWorkflow = () => {
                         onChange={(e) => setQuery(e.target.value)}
                         placeholder="What would you like to write about?"
                         className="chat-input"
-                        disabled={status !== 'idle' && status !== 'finished'}
+                        disabled={status !== 'idle' && status !== 'finished' && status !== 'error'}
                     />
                     <button
                         onClick={startWorkflow}
-                        disabled={!query || (status !== 'idle' && status !== 'finished')}
+                        disabled={!query || (status !== 'idle' && status !== 'finished' && status !== 'error')}
                         className="btn-primary"
                     >
-                        {status === 'running' ? 'Generating...' : 'Start New'}
+                        {status === 'running' ? 'Generating...' : status === 'error' ? 'Try Again' : 'Start New'}
                     </button>
                 </div>
+                {status === 'error' && errorMessage && (
+                    <div className="hitl-error-message" role="alert">
+                        {errorMessage}
+                    </div>
+                )}
             </div>
 
             {/* Main Workflow Area */}
@@ -777,6 +871,15 @@ const HitlWorkflow = () => {
                                                 <ReactMarkdown>{editedContent || modifiedVersions[currentIndex] || currentChunkContent}</ReactMarkdown>
                                             </div>
                                         </div>
+                                        <div className="comparison-panel comparison-panel-full">
+                                            <h4>GitHub-style Diff</h4>
+                                            <div className="comparison-content">
+                                                {renderLineDiff(
+                                                    firstGeneratedVersions[currentIndex],
+                                                    editedContent || modifiedVersions[currentIndex] || currentChunkContent
+                                                )}
+                                            </div>
+                                        </div>
                                     </div>
                                 )}
 
@@ -869,6 +972,44 @@ const HitlWorkflow = () => {
                             <div className="success-card">
                                 <h3>🎉 Generation Complete!</h3>
                                 <p>All sections have been approved and finalized.</p>
+                                <button
+                                    className="btn-primary"
+                                    style={{ marginTop: '1rem' }}
+                                    onClick={async () => {
+                                        if (!threadId) {
+                                            setErrorMessage('Session ID missing. Please run the workflow again.');
+                                            return;
+                                        }
+                                        try {
+                                            const response = await fetch(`${BASE_URL}/custom/export/pdf`, {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({ thread_id: threadId }),
+                                            });
+                                            if (!response.ok) {
+                                                const errText = await response.text();
+                                                let msg = `PDF export failed (${response.status}).`;
+                                                if (errText) msg += ` ${errText.slice(0, 200)}`;
+                                                throw new Error(msg);
+                                            }
+                                            const blob = await response.blob();
+                                            const url = window.URL.createObjectURL(blob);
+                                            const a = document.createElement('a');
+                                            a.href = url;
+                                            a.download = 'hitl_content.pdf';
+                                            document.body.appendChild(a);
+                                            a.click();
+                                            a.remove();
+                                            window.URL.revokeObjectURL(url);
+                                        } catch (err) {
+                                            console.error('Error exporting PDF:', err);
+                                            setErrorMessage(err?.message || 'Failed to export PDF.');
+                                            setStatus('error');
+                                        }
+                                    }}
+                                >
+                                    Download as PDF
+                                </button>
                             </div>
                         )}
 

@@ -1,12 +1,12 @@
-# Lesson 4: Custom Gen AI Workflow with HITL
-# Advanced workflow demonstrating Iterative Chunk-Based Generation
-# Uses Server-Sent Events (SSE) for real-time streaming
-
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request, HTTPException, Response
 from uuid import uuid4
-from app.models import StartRequest, GraphResponse, ResumeRequest
+from app.models import StartRequest, GraphResponse, ResumeRequest, ExportPdfRequest
 from app.custom_workflow import custom_graph
 from sse_starlette.sse import EventSourceResponse
+from io import BytesIO
+from reportlab.lib.pagesizes import LETTER
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 import json
 
 router = APIRouter()
@@ -31,6 +31,47 @@ def create_custom_workflow(request: StartRequest):
         run_status="pending",
         assistant_response=None
     )
+
+
+@router.post("/custom/export/pdf")
+def export_custom_workflow_pdf(request: ExportPdfRequest):
+    """
+    Export the final custom workflow content as a PDF.
+
+    Uses the graph state for the given thread_id and returns a PDF file
+    with all generated sections (or final_output if available).
+    """
+    config = {"configurable": {"thread_id": request.thread_id}}
+    try:
+        state = custom_graph.get_state(config)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Thread not found")
+
+    values = getattr(state, "values", {}) or {}
+    content = values.get("final_output") or "\n\n".join(values.get("generated_sections", []))
+    if not content:
+        raise HTTPException(status_code=400, detail="No content available to export yet.")
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=LETTER)
+    styles = getSampleStyleSheet()
+    story = []
+
+    for block in content.split("\n\n"):
+        text = block.strip()
+        if not text:
+            continue
+        story.append(Paragraph(text.replace("\n", "<br/>"), styles["Normal"]))
+        story.append(Spacer(1, 12))
+
+    doc.build(story)
+    pdf_bytes = buffer.getvalue()
+    buffer.close()
+
+    headers = {
+        "Content-Disposition": 'attachment; filename="hitl_content.pdf"'
+    }
+    return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)
 
 
 @router.post("/custom/resume", response_model=GraphResponse)
@@ -148,14 +189,28 @@ async def stream_custom_workflow(request: Request, thread_id: str):
             # input_state remains None for resume
             
     else:
-        # If no config in memory, assume it's a resume or reconnect
-        # But for 'start', we need the query. We'll assume resume.
-        pass
+        try:
+            existing = custom_graph.get_state(config)
+            if not existing.values:
+                input_state = None
+        except Exception:
+            input_state = None
 
     async def event_generator():
         # Initial handshake
         initial_data = json.dumps({"thread_id": thread_id})
         yield {"event": event_type, "data": initial_data}
+        
+        # Cannot start without input (new thread with no run_data)
+        if input_state is None and event_type == "resume":
+            try:
+                state = custom_graph.get_state(config)
+                if not state.values:
+                    yield {"event": "server_error", "data": json.dumps({"error": "Session expired or invalid. Please start a new workflow."})}
+                    return
+            except Exception:
+                yield {"event": "server_error", "data": json.dumps({"error": "Session expired or invalid. Please start a new workflow."})}
+                return
         
         try:
             # Stream from graph
@@ -208,6 +263,11 @@ async def stream_custom_workflow(request: Request, thread_id: str):
         except Exception as e:
             import traceback
             traceback.print_exc()
-            yield {"event": "error", "data": json.dumps({"error": str(e)})}
+            err_msg = str(e)
+            if "connection" in err_msg.lower() or "refused" in err_msg.lower() or "11434" in err_msg:
+                err_msg = "Ollama is not running. Start it with: ollama serve (and run: ollama pull gemma3:1b)"
+            elif "not found" in err_msg.lower() or "model" in err_msg.lower():
+                err_msg = "Ollama model not found. Run: ollama pull gemma3:1b (or set OLLAMA_MODEL in .env)"
+            yield {"event": "server_error", "data": json.dumps({"error": err_msg})}
 
     return EventSourceResponse(event_generator())

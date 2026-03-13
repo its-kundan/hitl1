@@ -1,17 +1,22 @@
 from typing import Literal, Optional, List
 from langgraph.graph import StateGraph, MessagesState, START, END
-from langchain_openai import ChatOpenAI
+from langchain_ollama import ChatOllama
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.checkpoint.memory import MemorySaver
 from dotenv import load_dotenv
+from app.ollama_models import get_available_ollama_model
 import os
 import json
 
 # Load environment variables
 load_dotenv()
 
-# --- Model Definition ---
-model = ChatOpenAI(model="gpt-4o-mini", api_key=os.getenv("OPENAI_API_KEY"))
+# --- Model Definition (Ollama local - uses model available on your PC) ---
+model = ChatOllama(
+    model=get_available_ollama_model(),
+    base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
+    temperature=0.3,
+)
 
 
 # --- Graph State Definition ---
@@ -122,7 +127,17 @@ def generate_section_node(state: CustomWorkflowState) -> CustomWorkflowState:
         Write ONLY the content for "{current_topic}". Do not repeat previous sections.
         """
     
-    response = model.invoke([SystemMessage(content="You are a helpful content writer."), HumanMessage(content=prompt)])
+    response = model.invoke([
+        SystemMessage(content=(
+            "You are a content writing assistant. Always respond with ONLY the final, polished section text, "
+            "as if it appears directly in the article. Do NOT include prefaces, explanations, or phrases like "
+            "\"Here is\", \"Okay, here is\", \"In this section we will\", or similar meta-introductions. "
+            "NEVER use placeholder brackets such as [Topic of the Section], [mention target audience], "
+            "or any text in square brackets; instead, replace them with specific, concrete content based on the prompt. "
+            "Do not say that you are revising or generating; just output the final prose for the reader."
+        )),
+        HumanMessage(content=prompt),
+    ])
     
     # Update generated_sections
     sections = list(state["generated_sections"])
